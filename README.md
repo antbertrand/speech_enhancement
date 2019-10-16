@@ -2,7 +2,11 @@
 
 ## Dataset
 
-[TIMIT Acoustic-Phonetic Continuous Speech Corpus](https://catalog.ldc.upenn.edu/LDC93S1)
+
+** Celui du prof ** : [TIMIT Acoustic-Phonetic Continuous Speech Corpus](https://catalog.ldc.upenn.edu/LDC93S1)
+
+Autres :
+- [NTCD-TIMIT corpus](https://zenodo.org/record/1172064)
 
 
 ## References
@@ -13,3 +17,6 @@
 - [A Fully Convolutional Neural Network for Speech Enhancement](https://paperswithcode.com/paper/a-fully-convolutional-neural-network-for)
 - [Unpaired Speech Enhancement by Acoustic and Adversarial Supervision for Speech Recognition](https://paperswithcode.com/paper/unpaired-speech-enhancement-by-acoustic-and)
 - [Improved Speech Enhancement with the Wave-U-Net](https://paperswithcode.com/paper/improved-speech-enhancement-with-the-wave-u)
+
+**Autres refs pas dans /refs**
+https://ieeexplore.ieee.org/document/8683423
