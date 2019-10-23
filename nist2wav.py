@@ -4,7 +4,7 @@ from sphfile import SPHFile
 
 def main():
     
-    root_dir = "./data"
+    root_dir = "./data/raw"
 
     for root, dirs, files in os.walk(root_dir):
         for file in files:
