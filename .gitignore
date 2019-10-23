@@ -104,3 +104,10 @@ venv.bak/
 .mypy_cache/
 
 
+
+
+# data
+/data/raw
+*.wav
+*.WAV
+
