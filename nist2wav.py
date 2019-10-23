@@ -1,16 +1,28 @@
 import os
+import sys
 from sphfile import SPHFile
+
+# Adapted from https://stackoverflow.com/questions/44748258/reading-a-wav-file-from-timit-database-in-python
 
 
 def main():
-    
-    root_dir = "./data"
+
+    assert len(sys.argv)==2, "root_dir needed as argument"
+    root_dir = sys.argv[1]
 
     for root, dirs, files in os.walk(root_dir):
         for file in files:
             if file.endswith(".WAV"):
                 wav_file = os.path.join(root, file)
                 nist2wav(wav_file)
+
+    delete_WAV = input('Do you want to delete old .WAV ? y/[n]')
+
+    if delete_WAV == 'y':
+        for root, dirs, files in os.walk(root_dir):
+            for file in files:
+                if file.endswith(".WAV"):
+                    os.remove(os.path.join(root, file))
 
 
 def nist2wav(wav_file):
