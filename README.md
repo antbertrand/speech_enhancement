@@ -4,10 +4,10 @@
 
 
 **Celui du prof** : [TIMIT Acoustic-Phonetic Continuous Speech Corpus](https://catalog.ldc.upenn.edu/LDC93S1)
-
+[
 Autres :
 - [NTCD-TIMIT corpus](https://zenodo.org/record/1172064)
-
+- [The DARPA TIMIT Acoustic-Phonetic Continuous Speech Corpus / GitHub Dataset Description]https://github.com/philipperemy/timit
 
 ## References
 
