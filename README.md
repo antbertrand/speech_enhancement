@@ -22,5 +22,8 @@ Autres :
 **Autres papiers pas dans /refs**
 https://ieeexplore.ieee.org/document/8683423
 
+**Repositories**
+- [torchaudio : Data manipulation and transformation for audio signal processing, powered by PyTorch](https://github.com/pytorch/audio) ([doc](https://pytorch.org/audio/))
+
 **Autres refs**
 [cs230-stanford code layout](https://cs230-stanford.github.io/pytorch-getting-started.html#code-layout)
