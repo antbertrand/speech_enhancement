@@ -6,14 +6,9 @@ from sphfile import SPHFile
 
 
 def main():
-<<<<<<< HEAD
-    
-    root_dir = "./data/raw"
-=======
 
     assert len(sys.argv)==2, "root_dir needed as argument"
     root_dir = sys.argv[1]
->>>>>>> bc075d6d0bba47b6ff2bf0a4660634298a79faa9
 
     for root, dirs, files in os.walk(root_dir):
         for file in files:
