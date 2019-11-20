@@ -9,7 +9,7 @@ from PIL import Image
 
 
 class DatasetCreator(object):
-    """Base class that will create our noised dataset
+    """Base class that will create our noisy dataset
     """
 
     def __init__(self):
@@ -43,11 +43,11 @@ class DatasetCreator(object):
                     spectro = getSpectrogram(sig_mixed)
 
 
-                    # Changing path to link to noised folder
-                    root2 = root.replace('raw', 'noised')
+                    # Changing path to link to noisy folder
+                    root2 = root.replace('raw', 'noisy')
                     file_path2 = os.path.join(root2, file)
 
-                    #Create directories in noised folder
+                    #Create directories in noisy folder
                     if not os.path.exists(root2):
                         os.makedirs(root2)
 

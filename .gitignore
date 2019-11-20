@@ -108,6 +108,8 @@ venv.bak/
 
 # data
 /data/raw
+/data/noisy
+
 *.wav
 *.WAV
 
