@@ -113,3 +113,6 @@ venv.bak/
 
 # IDE
 .vscode/
+
+# Dossiers test d'autres implémentations
+park2017*/
