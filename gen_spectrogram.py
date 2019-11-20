@@ -22,19 +22,17 @@ def convert(path):
     #save as wav
     audio.export(path, format="wav")
 
-def getSpectrogram(path, winlen=0.032, winstep=0.004, NFFT=512):
+def getSpectrogram(sig2, winlen=0.032, winstep=0.016, NFFT=512):
 
-    #open wav file
-    (rate,sig) = wave.read(path)
-    print(rate)
 
     print('taille fen= ',winlen*rate)
     print('step fen = ',winstep*rate)
 
     #get frames
     winfunc=lambda x:np.ones((x,))
-    frames = psf.sigproc.framesig(sig, winlen*rate, winstep*rate, winfunc)
+    frames = psf.sigproc.framesig(sig2, winlen*rate, winstep*rate, winfunc)
 
+    print(frames.shape)
     #Magnitude Spectrogram
     magspec = np.rot90(psf.sigproc.magspec(frames, NFFT))
 
@@ -48,14 +46,15 @@ def getSpectrogram(path, winlen=0.032, winstep=0.004, NFFT=512):
     #show spec dimensions
     print(magspec.shape)
 
-    return magspec
+    im_spec = Image.fromarray(255*magspec)
+    #Converting in B/W mode
+    im_spec = im_spec.convert("L")
+
+    return im_spec
 
 
-# Get Spectrogram
-spec = getSpectrogram(filepath)
-
-# Saving it as image
-im_spec = Image.fromarray(255*spec)
-#Converting in B/W mode
-im_spec = im_spec.convert("L")
-im_spec.save("/home/abert/Documents/PHELMA/Projet/speech_enhancement/data/spectrogram/SA1_spec.png")
+if __name__ == '__main__':
+    # Get Spectrogram
+    (rate,sig) = wave.read(filepath)
+    spec = getSpectrogram(sig)
+    spec.save("/home/abert/Documents/PHELMA/Projet/speech_enhancement/data/spectrogram/SA1_spec.png")

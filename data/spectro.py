@@ -3,14 +3,13 @@ import scipy.io.wavfile as wave
 import python_speech_features as psf
 from pydub import AudioSegment
 import matplotlib.pyplot as plt
-from PIL import Image
 
 #your sound file
-filepath = '/home/abert/Documents/PHELMA/Projet/speech_enhancement/data/raw/TIMIT_TRAIN/DR1/FCJF0/SA1.wav'
+filepath = '/home/abert/Documents/PHELMA/Projet/speech_enhancement/data/raw/TIMIT_TRAIN/DR1/FCJF0/SA1.WAV'
 
 def convert(path):
 
-    #open file (supports all ffmpeg supported filetypes)
+    #open file (supports all ffmpeg supported filetypes) 
     audio = AudioSegment.from_file(path, path.split('.')[-1].lower())
 
     #set to mono
@@ -22,14 +21,10 @@ def convert(path):
     #save as wav
     audio.export(path, format="wav")
 
-def getSpectrogram(path, winlen=0.032, winstep=0.004, NFFT=512):
+def getSpectrogram(path, winlen=0.025, winstep=0.01, NFFT=512):
 
     #open wav file
     (rate,sig) = wave.read(path)
-    print(rate)
-
-    print('taille fen= ',winlen*rate)
-    print('step fen = ',winstep*rate)
 
     #get frames
     winfunc=lambda x:np.ones((x,))
@@ -46,16 +41,14 @@ def getSpectrogram(path, winlen=0.032, winstep=0.004, NFFT=512):
     magspec /= magspec.max(axis=0)
 
     #show spec dimensions
-    print(magspec.shape)
+    print(magspec.shape)    
 
     return magspec
 
+#convert file if you need to
+#convert(filepath)
 
-# Get Spectrogram
+#get spectrogram
 spec = getSpectrogram(filepath)
 
-# Saving it as image
-im_spec = Image.fromarray(255*spec)
-#Converting in B/W mode
-im_spec = im_spec.convert("L")
-im_spec.save("/home/abert/Documents/PHELMA/Projet/speech_enhancement/data/spectrogram/SA1_spec.png")
+
