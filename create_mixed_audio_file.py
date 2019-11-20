@@ -22,6 +22,8 @@ def cal_rms(amp):
 def mix_audio(clean_wav, noise_wav, snr):
 
     print('TAILLE_SIG',clean_wav.shape[0])
+    print('MAX CLEAN',np.amax(clean_wav))
+    print('MAX NOISE',np.amax(noise_wav))
     clean_amp = cal_amp(clean_wav)
     noise_amp = cal_amp(noise_wav)
 
@@ -37,9 +39,11 @@ def mix_audio(clean_wav, noise_wav, snr):
     mixed_amp = (clean_amp + adjusted_noise_amp)
 
     #Avoid clipping noise
+    '''
     max_int16 = np.iinfo(np.int16).max
     if  mixed_amp.max(axis=0) > max_int16:
         reduction_rate = max_int16 / mixed_amp.max(axis=0)
         mixed_amp = mixed_amp * (reduction_rate)
-
+    '''
+    print('MAX MIXED',np.amax(mixed_amp))
     return mixed_amp

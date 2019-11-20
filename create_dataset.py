@@ -4,7 +4,7 @@ import scipy.io.wavfile as wave
 from gen_spectrogram import getSpectrogram
 from create_mixed_audio_file import mix_audio
 from PIL import Image
-
+import numpy as np
 
 
 
@@ -38,7 +38,7 @@ class DatasetCreator(object):
                     print(rate)
                     # Create corresponding directory if doesn't exist
                     #new_root = string.replace(, '')
-                    sig_mixed = mix_audio(sig, noise, 0)
+                    sig_mixed = mix_audio(sig, noise, 6)
 
                     spectro = getSpectrogram(sig_mixed)
 
@@ -54,6 +54,7 @@ class DatasetCreator(object):
 
                     #Saving wav_file
                     print(file_path2, rate, type(sig_mixed))
+                    print('MAX SIG mIXED', np.amax(sig))
                     wave.write(file_path2, rate, sig_mixed)
 
                     # Saving spectrogram
