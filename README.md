@@ -27,6 +27,7 @@ https://ieeexplore.ieee.org/document/8683423
 
 **About noise**
 [Babble Noise - Frequency-shaped babble noise generator](https://mynoise.net/NoiseMachines/babbleNoiseGenerator.php)
+[Mixing an audio file with a noise file at any Signal-to-Noise Ratio](https://github.com/Sato-Kunihiko/audio-SNR)
 
 **Autres refs**
 [cs230-stanford code layout](https://cs230-stanford.github.io/pytorch-getting-started.html#code-layout)

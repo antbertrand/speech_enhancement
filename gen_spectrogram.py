@@ -22,17 +22,17 @@ def convert(path):
     #save as wav
     audio.export(path, format="wav")
 
-def getSpectrogram(sig2, winlen=0.032, winstep=0.016, NFFT=512):
+def getSpectrogram(sig2, winlen=0.032, winstep=0.016, NFFT=512, rate = 16000):
 
 
-    print('taille fen= ',winlen*rate)
-    print('step fen = ',winstep*rate)
+    #print('taille fen= ',winlen*rate)
+    #print('step fen = ',winstep*rate)
 
     #get frames
     winfunc=lambda x:np.ones((x,))
     frames = psf.sigproc.framesig(sig2, winlen*rate, winstep*rate, winfunc)
 
-    print(frames.shape)
+    #print(frames.shape)
     #Magnitude Spectrogram
     magspec = np.rot90(psf.sigproc.magspec(frames, NFFT))
 
@@ -44,7 +44,7 @@ def getSpectrogram(sig2, winlen=0.032, winstep=0.016, NFFT=512):
     magspec /= magspec.max(axis=0)
 
     #show spec dimensions
-    print(magspec.shape)
+    #print(magspec.shape)
 
     im_spec = Image.fromarray(255*magspec)
     #Converting in B/W mode
