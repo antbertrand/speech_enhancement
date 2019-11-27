@@ -1,12 +1,14 @@
-import numpy as np
 import os
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
 import torch
 import torchaudio
 from torch.utils.data import Dataset
-from torchaudio.transforms import Spectrogram, MelScale
 from torchaudio.compliance import kaldi
-import numpy as np
-import matplotlib.pyplot as plt
+from torchaudio.transforms import Spectrogram, MelScale
 
 from utils import sec_to_hms
 
@@ -20,15 +22,15 @@ def main():
     csv_raw_test = './test_raw.csv'
     csv_noise_train = './train_noise.csv'
     csv_noise_test = './test_noise.csv'
-    
-    snr = 1 # TODO check if in dB or not
-    
-    noiseDataset = NoiseDataset(csv_noise_train, fs=None)
-    # TODO décider si je me sers de NoiseDataset en dehors ou en dedans de CustomDataset
-    
-    in_raw_tf = noiseDataset.add_noise_snr
-    in_raw_tf_kwargs = {"fs": None, "snr":1}
 
+    snr = 1  # TODO check if in dB or not
+
+    noiseDataset = NoiseDataset(csv_noise_train, fs=None)
+
+    in_raw_tf = noiseDataset.add_noise_snr
+    in_raw_tf_kwargs = {"fs": None, "snr": 1}
+
+    # check if csv files are done
     if not all(os.path.exists(f) for f in (csv_raw_train, csv_raw_test)):
         create_csv(root_dir, train_path=csv_raw_train, test_path=csv_raw_test)
 
@@ -58,11 +60,11 @@ def main():
                               in_feats_tf=None, in_feats_tf_kwargs={},
                               target_feats_tf=None, target_feats_tf_kwargs={})
     test_set = CustomDataset(root_dir, csv_raw_test, csv_noise_test,
-                              in_raw_tf=in_raw_tf, in_raw_tf_kwargs=in_raw_tf_kwargs,
-                              target_raw_tf=None, target_raw_tf_kwargs={},
-                              features_tf=features_tf, features_tf_kwargs={},
-                              in_feats_tf=None, in_feats_tf_kwargs={},
-                              target_feats_tf=None, target_feats_tf_kwargs={})
+                             in_raw_tf=in_raw_tf, in_raw_tf_kwargs=in_raw_tf_kwargs,
+                             target_raw_tf=None, target_raw_tf_kwargs={},
+                             features_tf=features_tf, features_tf_kwargs={},
+                             in_feats_tf=None, in_feats_tf_kwargs={},
+                             target_feats_tf=None, target_feats_tf_kwargs={})
 
     # Plot histograms of lengths
     # _, ax = plt.subplots()
@@ -94,6 +96,7 @@ class CustomDataset(Dataset):
 
         self.root_dir = root_dir
         self.csv_raw = csv_raw
+        self.raw_paths = pd.read_csv(self.csv_raw).to_numpy().squeeze()
         self.fs = fs
         self.in_raw_tf = in_raw_tf
         self.in_raw_tf_kwargs = in_raw_tf_kwargs
@@ -105,9 +108,6 @@ class CustomDataset(Dataset):
         self.in_feats_tf_kwargs = in_feats_tf_kwargs
         self.target_feats_tf = target_feats_tf
         self.target_feats_tf_kwargs = target_feats_tf_kwargs
-
-        with open(csv_raw, 'r') as f:
-            self.raw_paths = f.read().split('\n')
 
     def __len__(self):
         return len(self.raw_paths)
@@ -127,7 +127,8 @@ class CustomDataset(Dataset):
 
         # Exctract features
         if self.features_tf is not None:
-            x, y = (self.features_tf(a, **self.features_tf_kwargs) for a in (raw_in, raw_target))
+            x, y = (self.features_tf(a, **self.features_tf_kwargs)
+                    for a in (raw_in, raw_target))
         else:
             x, y = raw_in, raw_target  # No features extraction
 
@@ -137,7 +138,7 @@ class CustomDataset(Dataset):
         # Transform target features
         if self.target_feats_tf is not None:
             y = self.target_feats_tf(y, **self.target_feats_tf_kwargs)
-            
+
         # TODO look for STFT output, to handle sliding windows.
 
         return x.squeeze(), y.squeeze()
@@ -186,10 +187,7 @@ class NoiseDataset(Dataset):
         """
         self.csv_noise = csv_noise
         self.fs = fs
-
-        with open(csv_noise, 'r') as f:
-            self.noise_paths = f.read().split('\n')
-
+        self.noise_paths = pd.read_csv(csv_noise).to_numpy().squeeze()
         self.nb_samples_cumsum = self.__init_nb_samples_cumsum()
 
         # for random noise generation
@@ -255,7 +253,7 @@ class NoiseDataset(Dataset):
             torch.tensor(dtype=torch.double) -- sequence of noise.
                                                 shape torch.Size([noise_len])
         """
-        
+
         if fs is not None:
             fs_old = self.fs
             self.fs = fs
@@ -270,15 +268,15 @@ class NoiseDataset(Dataset):
 
             # check if there are enough samples at the right of the sound
             if (self.nb_samples_cumsum[sound_index] - index) > noise_len:
-                break # TODO fix it
+                break  # TODO fix it
 
         # TODO read with open + struct instead of loading the whole file
         noise = self[sound_index][sample_index:sample_index+noise_len]
         if fs is not None:
             self.fs = fs_old
-        
+
         return noise
-    
+
     def add_noise_snr(self, sig, *, fs=None, snr):
         # TODO handle size better than by squeezing
         noise = self.gen_noise(noise_len=len(sig.squeeze()), fs=fs)
@@ -286,7 +284,7 @@ class NoiseDataset(Dataset):
 
 
 ##################################################
-# Functions    
+# Functions
 
 def add_noise_snr(sig, noise, snr):
     # TODO handle snr
@@ -320,10 +318,17 @@ def create_csv(root_dir, train_path='./train_raw.csv', test_path='./test_raw.csv
             wav_files = [f for f in files if f.endswith('.wav')]
             wav_paths_test += [os.path.join(root, f) for f in wav_files]
 
-    with open(train_path, 'w') as f:
-        f.write('\n'.join(wav_paths_train))
-    with open(test_path, 'w') as f:
-        f.write('\n'.join(wav_paths_test))
+    pd.DataFrame(data={"col1": wav_paths_train}).to_csv(train_path,
+                                                        header=None, index=False)
+    pd.DataFrame(data={"col1": wav_paths_test}).to_csv(test_path,
+                                                       header=None, index=False)
+
+    # with open(train_path, 'w') as f:
+    #     # TODO use pandas
+    #     f.write('\n'.join(wav_paths_train))
+    # with open(test_path, 'w') as f:
+    #     # TODO use pandas
+    #     f.write('\n'.join(wav_paths_test))
 
     return train_path, test_path
 
