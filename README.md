@@ -26,8 +26,10 @@ https://ieeexplore.ieee.org/document/8683423
 - [torchaudio : Data manipulation and transformation for audio signal processing, powered by PyTorch](https://github.com/pytorch/audio) ([doc](https://pytorch.org/audio/))
 
 **About noise**
-[Babble Noise - Frequency-shaped babble noise generator](https://mynoise.net/NoiseMachines/babbleNoiseGenerator.php)
-[Mixing an audio file with a noise file at any Signal-to-Noise Ratio](https://github.com/Sato-Kunihiko/audio-SNR)
+- [Babble Noise - Frequency-shaped babble noise generator](https://mynoise.net/NoiseMachines/babbleNoiseGenerator.php)
+- [Mixing an audio file with a noise file at any Signal-to-Noise Ratio](https://github.com/Sato-Kunihiko/audio-SNR)
+- [Freesound : babble noise](https://freesound.org/search/?q=babble)
+- [Non speech noise (N1-N17 : crowd noise)](http://web.cse.ohio-state.edu/pnl/corpus/HuNonspeech/HuCorpus.html)
 
 **Autres refs**
 [cs230-stanford code layout](https://cs230-stanford.github.io/pytorch-getting-started.html#code-layout)
