@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 from torchaudio.compliance import kaldi
 from torchaudio.transforms import Spectrogram, MelScale
 
-from utils import sec_to_hms
+from utils import sec_to_hms, read_wav
 
 
 ##################################################
@@ -114,7 +114,7 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, index):
 
-        raw_target, fs = torchaudio.load(self.raw_paths[index])  # Ground truth
+        raw_target, fs = read_wav(self.raw_paths[index])  # Ground truth
 
         # Transform the raw ground truth
         if self.target_raw_tf is not None:
@@ -232,7 +232,7 @@ class NoiseDataset(Dataset):
         Returns:
             torch.tensor(dtype=torch.double) -- shape torch.Size([length of the sound file in samples])
         """
-        noise, fs = torchaudio.load(self.noise_paths[index])
+        noise, fs = read_wav(self.noise_paths[index])
         noise = noise.squeeze()
 
         # resample to the dataset wanted fs `self.fs`
