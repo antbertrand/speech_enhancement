@@ -268,7 +268,7 @@ class NoiseDataset(Dataset):
 
             # check if there are enough samples at the right of the sound
             if (self.nb_samples_cumsum[sound_index] - index) > noise_len:
-                break  # TODO fix it
+                break
 
         # TODO read with open + struct instead of loading the whole file
         noise = self[sound_index][sample_index:sample_index+noise_len]
@@ -322,13 +322,6 @@ def create_csv(root_dir, train_path='./train_raw.csv', test_path='./test_raw.csv
                                                         header=None, index=False)
     pd.DataFrame(data={"col1": wav_paths_test}).to_csv(test_path,
                                                        header=None, index=False)
-
-    # with open(train_path, 'w') as f:
-    #     # TODO use pandas
-    #     f.write('\n'.join(wav_paths_train))
-    # with open(test_path, 'w') as f:
-    #     # TODO use pandas
-    #     f.write('\n'.join(wav_paths_test))
 
     return train_path, test_path
 
