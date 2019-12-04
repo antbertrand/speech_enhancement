@@ -24,6 +24,7 @@ https://ieeexplore.ieee.org/document/8683423
 
 **Repositories**
 - [torchaudio : Data manipulation and transformation for audio signal processing, powered by PyTorch](https://github.com/pytorch/audio) ([doc](https://pytorch.org/audio/))
+- [nnAudio : Fast STFT, MFCC etc.](https://github.com/KinWaiCheuk/nnAudio)
 
 **About noise**
 - [Babble Noise - Frequency-shaped babble noise generator](https://mynoise.net/NoiseMachines/babbleNoiseGenerator.php)
