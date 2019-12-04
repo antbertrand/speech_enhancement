@@ -57,6 +57,8 @@ class DatasetCreator(object):
                     print('MAX SIG mIXED', np.amax(sig))
                     wave.write(file_path2, rate, sig_mixed)
 
+
+
                     # Saving spectrogram
                     spectro.save(file_path2[:-4]+'.png')
 
