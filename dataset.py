@@ -1,4 +1,5 @@
 import os
+import time
 
 import numpy as np
 import pandas as pd
@@ -59,12 +60,12 @@ def main():
                               features_tf=features_tf, features_tf_kwargs={},
                               in_feats_tf=None, in_feats_tf_kwargs={},
                               target_feats_tf=None, target_feats_tf_kwargs={})
-    test_set = CustomDataset(root_dir, csv_raw_test, csv_noise_test,
-                             in_raw_tf=in_raw_tf, in_raw_tf_kwargs=in_raw_tf_kwargs,
-                             target_raw_tf=None, target_raw_tf_kwargs={},
-                             features_tf=features_tf, features_tf_kwargs={},
-                             in_feats_tf=None, in_feats_tf_kwargs={},
-                             target_feats_tf=None, target_feats_tf_kwargs={})
+    # test_set = CustomDataset(root_dir, csv_raw_test, csv_noise_test,
+    #                          in_raw_tf=in_raw_tf, in_raw_tf_kwargs=in_raw_tf_kwargs,
+    #                          target_raw_tf=None, target_raw_tf_kwargs={},
+    #                          features_tf=features_tf, features_tf_kwargs={},
+    #                          in_feats_tf=None, in_feats_tf_kwargs={},
+    #                          target_feats_tf=None, target_feats_tf_kwargs={})
 
     # Plot histograms of lengths
     # _, ax = plt.subplots()
@@ -76,8 +77,10 @@ def main():
     # Get an item and plot it
     x, y = train_set[56]
     _, (ax1, ax2) = plt.subplots(nrows=1, ncols=2)
-    ax1.imshow(x, label='input')  # ; ax1.legend()
-    ax2.imshow(y, label='ground truth')  # ; ax2.legend()
+    ax1.imshow(x)
+    ax1.set_title('input : {:d}, {:d}'.format(*x.shape))
+    ax2.imshow(y)
+    ax2.set_title('ground truth : {:d}, {:d}'.format(*x.shape))
     plt.show()
 
 
@@ -187,7 +190,8 @@ class NoiseDataset(Dataset):
         """
         self.csv_noise = csv_noise
         self.fs = fs
-        self.noise_paths = pd.read_csv(csv_noise).to_numpy().squeeze()
+        with open(self.csv_noise, 'r') as f:
+            self.noise_paths = f.read().split('\n')
         self.nb_samples_cumsum = self.__init_nb_samples_cumsum()
 
         # for random noise generation
@@ -237,7 +241,7 @@ class NoiseDataset(Dataset):
 
         # resample to the dataset wanted fs `self.fs`
         if (self.fs is not None) and (self.fs != fs):
-            kaldi.resample_waveform(noise, fs, self.fs)
+            kaldi.resample_waveform(noise, fs, self.fs) # TODO register output
 
         return torch.tensor(noise, dtype=torch.double)
 
@@ -259,6 +263,7 @@ class NoiseDataset(Dataset):
             self.fs = fs
 
         # generate random index
+        cnt = 0
         while True:  # do ... while
             index = torch.randint(low=0, high=self.nb_samples_cumsum[-1],
                                   size=(1,))
@@ -269,6 +274,10 @@ class NoiseDataset(Dataset):
             # check if there are enough samples at the right of the sound
             if (self.nb_samples_cumsum[sound_index] - index) > noise_len:
                 break
+
+            cnt += 1
+            if cnt > 100:
+                print('STUCK')
 
         # TODO read with open + struct instead of loading the whole file
         noise = self[sound_index][sample_index:sample_index+noise_len]
