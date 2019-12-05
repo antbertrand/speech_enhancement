@@ -6,23 +6,34 @@ Conclusion :
 - Use `scipy.io.wavfile.read()` when loading the whole file.
 - Use `wave` + `np.from_buffer()` when loading a part.
 """
-import numpy as np
 import wave
+
+import numpy as np
 import torch
 import torchaudio
 from scipy.io import wavfile
-import timeit
+
+if True:  # Not to break code order with autoformatter
+    # Needed here, and not under ifmain, because @time decorator is imported
+    import sys
+    from os import path
+    sys.path.insert(1, path.dirname(path.dirname(path.abspath(__file__))))
+    from utils.utils import time
+
+
+ACTIVATED = True
+NUMBER = 10000
 
 
 def main():
 
     # Parameters
-    filename = 'SA1.wav'
+    filename = './tests/SA1.wav'
     offset = 2048
     nframes = 1024
 
     # Check for consistence
-    if True:
+    if not ACTIVATED:
 
         # Loading whole file
         x1 = load1(filename)
@@ -37,33 +48,28 @@ def main():
         assert torch.all(torch.eq(x1, x2)) and torch.all(torch.eq(x2, x3))
 
     # Time it
-    if True:
+    if ACTIVATED:
 
         # Loading the whole file
-        print('  Loading the whole file.')
-        print('#1 wave:')
-        print(timeit.timeit("load1('SA1.wav')",
-                            setup="from __main__ import load1", number=10000))
-        print('\n#2 torchaudio:')
-        print(timeit.timeit("load2('SA1.wav')",
-                            setup="from __main__ import load2", number=10000))
-        print('\n#3 scipy:')
-        print(timeit.timeit("load3('SA1.wav')",
-                            setup="from __main__ import load3", number=10000))
+        print('\n\n---Loading the whole file.')
+        print('\n  #1 wave: ', end='')
+        print(load1(filename))
+        print('\n  #2 torchaudio: ', end='')
+        print(load2(filename))
+        print('\n  #3 scipy: ', end='')
+        print(load3(filename))
 
         # Loading a part
-        print('\n\n  Loading a part.')
-        print('#1 wave:')
-        print(timeit.timeit("load1_part('SA1.wav', 2048, 1024)",
-                            setup="from __main__ import load1_part", number=10000))
-        print('\n#2 torchaudio:')
-        print(timeit.timeit("load2_part('SA1.wav', 2048, 1024)",
-                            setup="from __main__ import load2_part", number=10000))
-        print('\n#3 scipy:')
-        print(timeit.timeit("load3_part('SA1.wav', 2048, 1024)",
-                            setup="from __main__ import load3_part", number=10000))
+        print('\n\n---Loading a part.')
+        print('\n  #1 wave: ', end='')
+        print(load1_part(filename, offset, nframes))
+        print('\n  #2 torchaudio: ', end='')
+        print(load2_part(filename, offset, nframes))
+        print('\n  #3 scipy: ', end='')
+        print(load3_part(filename, offset, nframes))
 
 
+@time(NUMBER, ACTIVATED)
 def load1(filename):
     # With wave + numpy.frombuffer
     with wave.open(filename) as f:
@@ -75,6 +81,7 @@ def load1(filename):
     return x
 
 
+@time(NUMBER, ACTIVATED)
 def load2(filename):
     # With torchaudio.load_wav
     x, fs = torchaudio.load_wav(filename)
@@ -83,6 +90,7 @@ def load2(filename):
     return x
 
 
+@time(NUMBER, ACTIVATED)
 def load3(filename):
     # With scipy.io.wavfile.read
     fs, x = wavfile.read(filename, mmap=False)
@@ -92,6 +100,7 @@ def load3(filename):
     return x
 
 
+@time(NUMBER, ACTIVATED)
 def load1_part(filename, offset, nframes):
     # With wave + numpy.frombuffer
     with wave.open(filename) as f:
@@ -104,6 +113,7 @@ def load1_part(filename, offset, nframes):
     return x
 
 
+@time(NUMBER, ACTIVATED)
 def load2_part(filename, offset, nframes):
     # With torchaudio.load_wav
     x, fs = torchaudio.load_wav(filename)
@@ -112,6 +122,7 @@ def load2_part(filename, offset, nframes):
     return x
 
 
+@time(NUMBER, ACTIVATED)
 def load3_part(filename, offset, nframes):
     # With scipy.io.wavfile.read
     fs, x = wavfile.read(filename, mmap=True)
