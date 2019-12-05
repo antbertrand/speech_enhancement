@@ -23,6 +23,7 @@ if True:  # Not to break code order with autoformatter
 
 ACTIVATED = True
 NUMBER = 10000
+PRINT_FUNC_CALL = True
 
 
 def main():
@@ -69,7 +70,7 @@ def main():
         print(load3_part(filename, offset, nframes))
 
 
-@time(NUMBER, ACTIVATED)
+@time(NUMBER, ACTIVATED, PRINT_FUNC_CALL)
 def load1(filename):
     # With wave + numpy.frombuffer
     with wave.open(filename) as f:
@@ -81,7 +82,7 @@ def load1(filename):
     return x
 
 
-@time(NUMBER, ACTIVATED)
+@time(NUMBER, ACTIVATED, PRINT_FUNC_CALL)
 def load2(filename):
     # With torchaudio.load_wav
     x, fs = torchaudio.load_wav(filename)
@@ -90,7 +91,7 @@ def load2(filename):
     return x
 
 
-@time(NUMBER, ACTIVATED)
+@time(NUMBER, ACTIVATED, PRINT_FUNC_CALL)
 def load3(filename):
     # With scipy.io.wavfile.read
     fs, x = wavfile.read(filename, mmap=False)
@@ -100,7 +101,7 @@ def load3(filename):
     return x
 
 
-@time(NUMBER, ACTIVATED)
+@time(NUMBER, ACTIVATED, PRINT_FUNC_CALL)
 def load1_part(filename, offset, nframes):
     # With wave + numpy.frombuffer
     with wave.open(filename) as f:
@@ -113,7 +114,7 @@ def load1_part(filename, offset, nframes):
     return x
 
 
-@time(NUMBER, ACTIVATED)
+@time(NUMBER, ACTIVATED, PRINT_FUNC_CALL)
 def load2_part(filename, offset, nframes):
     # With torchaudio.load_wav
     x, fs = torchaudio.load_wav(filename)
@@ -122,7 +123,7 @@ def load2_part(filename, offset, nframes):
     return x
 
 
-@time(NUMBER, ACTIVATED)
+@time(NUMBER, ACTIVATED, PRINT_FUNC_CALL)
 def load3_part(filename, offset, nframes):
     # With scipy.io.wavfile.read
     fs, x = wavfile.read(filename, mmap=True)

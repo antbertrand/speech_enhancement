@@ -1,7 +1,7 @@
 import timeit
 
 
-def time(number, activated=True):
+def time(number, activated=True, print_func_call=False):
     """Decorator that can be used to time a function.
     It prints the function call as a string and returns the time spend
     inside the function, according to timeit module.
@@ -26,7 +26,8 @@ def time(number, activated=True):
 
             def closure():
                 return func(*args, **kwargs)
-            print(str_func_call(func.__name__, *args, **kwargs))
+            if print_func_call:
+                print(str_func_call(func.__name__, *args, **kwargs))
             return timeit.timeit(closure, number=number)
         return wrapper
     return decorator
