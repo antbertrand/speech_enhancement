@@ -16,7 +16,6 @@
 ### Papers with code
 
 - [SEGAN: Speech Enhancement Generative Adversarial Network](https://paperswithcode.com/paper/segan-speech-enhancement-generative)
-
 - [A variance modeling framework based on variational autoencoders for speech enhancement](https://paperswithcode.com/paper/a-variance-modeling-framework-based-on)
 - [Supervised and Unsupervised Speech Enhancement Using Nonnegative Matrix Factorization](https://paperswithcode.com/paper/supervised-and-unsupervised-speech)
 - [A Fully Convolutional Neural Network for Speech Enhancement](https://paperswithcode.com/paper/a-fully-convolutional-neural-network-for)
