@@ -5,7 +5,7 @@ import torch
 from scipy.io import wavfile
 
 
-def read_wav(filename, offset=0, nframes=None, dtype=torch.double):
+def read_wav(filename, offset=0, nframes=None, dtype=torch.float):
     """Efficiently read wav files. Using `scipy.io.wavfile.read()` when
     reading the whole file, and `wave` library when reading a part of
     the file. Only implemented for mono channel sounds.

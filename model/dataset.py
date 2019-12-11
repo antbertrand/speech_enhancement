@@ -1,9 +1,11 @@
 import os
 import time
 
+import random
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import scipy.io.wavfile as wave
 
 import torch
 import torchaudio
@@ -11,20 +13,25 @@ from torch.utils.data import Dataset
 from torchaudio.compliance import kaldi
 from torchaudio.transforms import Spectrogram, MelScale
 
-from utils import sec_to_hms, read_wav
-
+if True:  # Not to break code order with autoformatter
+    # Needed here, and not under ifmain, because @time decorator is imported
+    import sys
+    from os import path
+    sys.path.insert(1, path.dirname(path.dirname(path.abspath(__file__))))
+    from utils.utils import sec_to_hms
+    from utils.wavutils import read_wav
 
 ##################################################
 # Main
 
 def main():
     root_dir = './data/raw'
-    csv_raw_train = './train_raw.csv'
-    csv_raw_test = './test_raw.csv'
-    csv_noise_train = './train_noise.csv'
-    csv_noise_test = './test_noise.csv'
+    csv_raw_train = './data/train_raw.csv'
+    csv_raw_test = './data/test_raw.csv'
+    csv_noise_train = './data/train_noise.csv'
+    csv_noise_test = './data/test_noise.csv'
 
-    snr = 1  # TODO check if in dB or not
+    snr = 0  # TODO check if in dB or not
 
     noiseDataset = NoiseDataset(csv_noise_train, fs=None)
 
@@ -198,8 +205,11 @@ class NoiseDataset(Dataset):
         import time
         torch.random.manual_seed(int(1e9*time.time()))
 
+
+        self.resampler = torchaudio.transforms.Resample(orig_freq = 16000, new_freq = 16000)
+
     def __init_nb_samples_cumsum(self):
-        """ Returns a list of the cumsum of the lengths of each noise file in 
+        """ Returns a list of the cumsum of the lengths of each noise file in
         the dataset, in number of samples. The purpose is to better randomize
         noise generation.
 
@@ -236,14 +246,18 @@ class NoiseDataset(Dataset):
         Returns:
             torch.tensor(dtype=torch.double) -- shape torch.Size([length of the sound file in samples])
         """
+        #noise, fs =torchaudio.load_wav(self.noise_paths[index])
         noise, fs = read_wav(self.noise_paths[index])
-        noise = noise.squeeze()
-
+        #noise = noise.squeeze()
+        print(noise)
+        noise1 = noise
         # resample to the dataset wanted fs `self.fs`
         if (self.fs is not None) and (self.fs != fs):
-            kaldi.resample_waveform(noise, fs, self.fs) # TODO register output
-
-        return torch.tensor(noise, dtype=torch.double)
+            if self.resampler.orig_freq != fs:
+                self.resampler.orig_freq = fs
+        noise = self.resampler(noise)
+        print(noise)
+        return noise, noise1 #torch.tensor(noise, dtype=torch.double)
 
     def gen_noise(self, noise_len, fs=None):
         """Randomly generate noise by selecting a sequence from the noise
@@ -286,22 +300,65 @@ class NoiseDataset(Dataset):
 
         return noise
 
+
+
+
     def add_noise_snr(self, sig, *, fs=None, snr):
         # TODO handle size better than by squeezing
         noise = self.gen_noise(noise_len=len(sig.squeeze()), fs=fs)
         return add_noise_snr(sig, noise, snr)
 
 
+
+
+
+
 ##################################################
 # Functions
 
+def cal_adjusted_rms(clean_rms, snr):
+    """ Adjusting RMS to SNR"""
+    a = float(snr) / 20
+    noise_rms = clean_rms / (10**a)
+    return noise_rms
+
+def cal_rms(amp):
+    """ Computing root mean square of signal"""
+    return np.sqrt(np.mean(np.square(amp), axis=-1))
+
 def add_noise_snr(sig, noise, snr):
-    # TODO handle snr
-    return sig + noise
+    """ Adding noise to sig according to certain SNR"""
+    # Recentrer les sons
+    clean = sig - np.mean(sig)
+    noise = noise - np.mean(noise)
+
+    # Calcul rms son clean
+    clean_rms = cal_rms(clean)
+
+    start = random.randint(0, len(noise)-len(clean))
+    divided_noise = noise[start: start + len(clean)]
+
+    # Calcul rms bruit
+    noise_rms = cal_rms(divided_noise)
+
+    # Ajustement rms bruit pour snr voulu
+    adjusted_noise_rms = cal_adjusted_rms(clean_rms, snr)
+    adjusted_noise = divided_noise * (adjusted_noise_rms / noise_rms)
+
+    # Ajout bruit au signal
+    mixed = (clean + adjusted_noise)
+
+    # Equilibrage rms sortie = rms entree
+    mixed = mixed * (clean_rms / cal_rms(mixed))
+
+    # Normalisation dans [-1, 1]
+    mixed = mixed/(max(np.amax(mixed), np.amin(mixed)))
+
+    return mixed
 
 
 def create_csv(root_dir, train_path='./train_raw.csv', test_path='./test_raw.csv'):
-    """Create a csv file for TIMIT corpus. 
+    """Create a csv file for TIMIT corpus.
 
     Arguments:
         root_dir {str} -- root directory from which create_csv will search for raw data
@@ -343,4 +400,19 @@ def spectrogram():
 
 
 if __name__ == '__main__':
-    main()
+    csv_noise_train = './data/train_noise.csv'
+    NS = NoiseDataset(csv_noise_train, fs=16000)
+
+    noise, noise1 = NS[0]
+
+    noise = noise[0].numpy()
+    noise1 = noise1[0].numpy()
+
+    noise = noise /(max(np.amax(noise), np.amin(noise)))
+    noise1 = noise1/(max(np.amax(noise1), np.amin(noise1)))
+
+
+    #print(noise[0].numpy())
+    wave.write('./test_add_noise/noise_before2.wav', 16000, noise)
+    wave.write('./test_add_noise/noise_after2.wav', 16000, noise1)
+    #main()
