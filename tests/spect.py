@@ -33,8 +33,8 @@ if True:  # Not to break code order with autoformatter
     from utils.utils import time
     from utils.wavutils import read_wav
 
-ACTIVATED = True
-NUMBER = 1000
+ACTIVATED = False
+NUMBER = 100
 
 
 def main():
@@ -43,7 +43,7 @@ def main():
     filename = './tests/SA1.wav'
     x, fs = read_wav(filename)
     offset = 11000
-    x = x[:, offset:offset+8192]
+    x = x[:, offset:offset+8000]
     n_fft = 256
     hop_length = 32
     n_overlap = n_fft - hop_length
@@ -69,6 +69,8 @@ def main():
         # Arguments for window function. (Default: None)
         "wkwargs": None
     }
+    
+    # assert spect.shape[2] == wavform.shape[1] // hop_length + 1
 
     # torchaudio.functional.spectrogram
     spec_torch_func_kwargs = {

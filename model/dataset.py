@@ -1,5 +1,4 @@
 import os
-import time
 
 import random
 import numpy as np
@@ -10,8 +9,8 @@ import scipy.io.wavfile as wave
 import torch
 import torchaudio
 from torch.utils.data import Dataset
-from torchaudio.compliance import kaldi
-from torchaudio.transforms import Spectrogram, MelScale
+from librosa.core import stft as librosa_stft
+from torchvision.transforms.functional import normalize
 
 if True:  # Not to break code order with autoformatter
     # Needed here, and not under ifmain, because @time decorator is imported
@@ -23,6 +22,7 @@ if True:  # Not to break code order with autoformatter
 
 ##################################################
 # Main
+
 
 def main():
     root_dir = './data/raw'
@@ -42,24 +42,19 @@ def main():
     if not all(os.path.exists(f) for f in (csv_raw_train, csv_raw_test)):
         create_csv(root_dir, train_path=csv_raw_train, test_path=csv_raw_test)
 
-    features_tf = Spectrogram(
-        # Size of FFT, creates n_fft // 2 + 1 bins
-        n_fft=512,
-        # Window size. (Default: n_fft)
-        win_length=None,
-        # Length of hop between STFT windows. ( Default: win_length // 2)
-        hop_length=100,
-        # Two sided padding of signal. (Default: 0)
-        pad=0,
-        # A fn to create a window tensor that is applied/multiplied to each frame/window. (Default: torch.hann_window)
-        window_fn=torch.hann_window,
-        # Exponent for the magnitude spectrogram, (must be > 0) e.g., 1 for energy, 2 for power, etc. (Default: 2)
-        power=2,
-        # Whether to normalize by magnitude after stft. (Default: False)
-        normalized=False,
-        # Arguments for window function. (Default: None)
-        wkwargs=None
-    )
+    features_tf = librosa_stft
+    n_fft = 256
+    hop_length = n_fft // 2
+
+    features_tf_kwargs = {
+        "n_fft": n_fft,
+        "hop_length": hop_length,
+        "win_length": None,
+        "window": torch.hann_window(n_fft).numpy(),  # 'hann',
+        "center": True,
+        "dtype": np.complex64,
+        "pad_mode": 'reflect'  # 'reflect'
+    }
 
     train_set = CustomDataset(root_dir, csv_raw_train, csv_noise_train,
                               in_raw_tf=in_raw_tf, in_raw_tf_kwargs=in_raw_tf_kwargs,
@@ -137,6 +132,7 @@ class CustomDataset(Dataset):
 
         # Exctract features
         if self.features_tf is not None:
+            # TODO fix size
             x, y = (self.features_tf(a, **self.features_tf_kwargs)
                     for a in (raw_in, raw_target))
         else:
@@ -205,8 +201,8 @@ class NoiseDataset(Dataset):
         import time
         torch.random.manual_seed(int(1e9*time.time()))
 
-
-        self.resampler = torchaudio.transforms.Resample(orig_freq = 16000, new_freq = 16000)
+        self.resampler = torchaudio.transforms.Resample(
+            orig_freq=16000, new_freq=16000)
 
     def __init_nb_samples_cumsum(self):
         """ Returns a list of the cumsum of the lengths of each noise file in
@@ -246,18 +242,16 @@ class NoiseDataset(Dataset):
         Returns:
             torch.tensor(dtype=torch.double) -- shape torch.Size([length of the sound file in samples])
         """
-        #noise, fs =torchaudio.load_wav(self.noise_paths[index])
+
         noise, fs = read_wav(self.noise_paths[index])
         #noise = noise.squeeze()
-        print(noise)
-        noise1 = noise
         # resample to the dataset wanted fs `self.fs`
         if (self.fs is not None) and (self.fs != fs):
             if self.resampler.orig_freq != fs:
                 self.resampler.orig_freq = fs
         noise = self.resampler(noise)
-        print(noise)
-        return noise, noise1 #torch.tensor(noise, dtype=torch.double)
+
+        return noise
 
     def gen_noise(self, noise_len, fs=None):
         """Randomly generate noise by selecting a sequence from the noise
@@ -294,23 +288,16 @@ class NoiseDataset(Dataset):
                 print('STUCK')
 
         # TODO read with open + struct instead of loading the whole file
-        noise = self[sound_index][sample_index:sample_index+noise_len]
+        noise = self[sound_index][:, sample_index:sample_index+noise_len]
         if fs is not None:
             self.fs = fs_old
 
         return noise
 
-
-
-
     def add_noise_snr(self, sig, *, fs=None, snr):
-        # TODO handle size better than by squeezing
-        noise = self.gen_noise(noise_len=len(sig.squeeze()), fs=fs)
+        # `sig` must be C * T * F
+        noise = self.gen_noise(noise_len=sig.shape[1], fs=fs)
         return add_noise_snr(sig, noise, snr)
-
-
-
-
 
 
 ##################################################
@@ -322,12 +309,18 @@ def cal_adjusted_rms(clean_rms, snr):
     noise_rms = clean_rms / (10**a)
     return noise_rms
 
+
 def cal_rms(amp):
     """ Computing root mean square of signal"""
     return np.sqrt(np.mean(np.square(amp), axis=-1))
 
+
 def add_noise_snr(sig, noise, snr):
     """ Adding noise to sig according to certain SNR"""
+    
+    sig = sig.numpy()
+    noise = noise.numpy()
+    
     # Recentrer les sons
     clean = sig - np.mean(sig)
     noise = noise - np.mean(noise)
@@ -354,7 +347,7 @@ def add_noise_snr(sig, noise, snr):
     # Normalisation dans [-1, 1]
     mixed = mixed/(max(np.amax(mixed), np.amin(mixed)))
 
-    return mixed
+    return torch.tensor(mixed) # TODO handle dtype
 
 
 def create_csv(root_dir, train_path='./train_raw.csv', test_path='./test_raw.csv'):
@@ -392,27 +385,28 @@ def create_csv(root_dir, train_path='./train_raw.csv', test_path='./test_raw.csv
     return train_path, test_path
 
 
-def spectrogram():
-    pass
+def librosa_stft(x, **kwargs):
+    """https://librosa.github.io/librosa/generated/librosa.core.stft.html#librosa-core-stft"""
+    S = torch.tensor(np.abs(librosa_stft(x[0].numpy(), **kwargs)),
+                     dtype=torch.double).unsqueeze_(dim=0)
+    return normalize(S, (S.mean(),), (S.std(),))
 
 ##################################################
 # Main
 
 
 if __name__ == '__main__':
-    csv_noise_train = './data/train_noise.csv'
-    NS = NoiseDataset(csv_noise_train, fs=16000)
+    if False:
+        csv_noise_train = './data/train_noise.csv'
+        NS = NoiseDataset(csv_noise_train, fs=16000)
 
-    noise, noise1 = NS[0]
+        noise = NS[0]
 
-    noise = noise[0].numpy()
-    noise1 = noise1[0].numpy()
+        noise = noise[0].numpy()
 
-    noise = noise /(max(np.amax(noise), np.amin(noise)))
-    noise1 = noise1/(max(np.amax(noise1), np.amin(noise1)))
+        noise = noise / (max(np.amax(noise), np.amin(noise)))
 
+        # print(noise[0].numpy())
+        wave.write('./data/noise/babble_res.wav', 16000, noise)
 
-    #print(noise[0].numpy())
-    wave.write('./test_add_noise/noise_before2.wav', 16000, noise)
-    wave.write('./test_add_noise/noise_after2.wav', 16000, noise1)
-    #main()
+    main()
