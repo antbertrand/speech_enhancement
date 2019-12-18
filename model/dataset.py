@@ -42,7 +42,7 @@ def main():
     if not all(os.path.exists(f) for f in (csv_raw_train, csv_raw_test)):
         create_csv(root_dir, train_path=csv_raw_train, test_path=csv_raw_test)
 
-    features_tf = librosa_stft
+    features_tf = stft
     n_fft = 256
     hop_length = n_fft // 2
 
@@ -59,7 +59,7 @@ def main():
     train_set = CustomDataset(root_dir, csv_raw_train, csv_noise_train,
                               in_raw_tf=in_raw_tf, in_raw_tf_kwargs=in_raw_tf_kwargs,
                               target_raw_tf=None, target_raw_tf_kwargs={},
-                              features_tf=features_tf, features_tf_kwargs={},
+                              features_tf=features_tf, features_tf_kwargs=features_tf_kwargs,
                               in_feats_tf=None, in_feats_tf_kwargs={},
                               target_feats_tf=None, target_feats_tf_kwargs={})
     # test_set = CustomDataset(root_dir, csv_raw_test, csv_noise_test,
@@ -77,14 +77,21 @@ def main():
     # plt.show()
 
     # Get an item and plot it
+    print('Taille dataset', len(train_set))
     x, y = train_set[56]
+
+    print(x.shape)
+
+    #wave.write('./tests/test1.wav', 16000, x)
+    #torchaudio.save('./tests/test1.wav', y, 16000)
     _, (ax1, ax2) = plt.subplots(nrows=1, ncols=2)
+    '''
     ax1.imshow(x)
     ax1.set_title('input : {:d}, {:d}'.format(*x.shape))
     ax2.imshow(y)
     ax2.set_title('ground truth : {:d}, {:d}'.format(*x.shape))
     plt.show()
-
+    '''
 
 ##################################################
 # Classes
@@ -317,10 +324,10 @@ def cal_rms(amp):
 
 def add_noise_snr(sig, noise, snr):
     """ Adding noise to sig according to certain SNR"""
-    
+
     sig = sig.numpy()
     noise = noise.numpy()
-    
+
     # Recentrer les sons
     clean = sig - np.mean(sig)
     noise = noise - np.mean(noise)
@@ -385,7 +392,7 @@ def create_csv(root_dir, train_path='./train_raw.csv', test_path='./test_raw.csv
     return train_path, test_path
 
 
-def librosa_stft(x, **kwargs):
+def stft(x, **kwargs):
     """https://librosa.github.io/librosa/generated/librosa.core.stft.html#librosa-core-stft"""
     S = torch.tensor(np.abs(librosa_stft(x[0].numpy(), **kwargs)),
                      dtype=torch.double).unsqueeze_(dim=0)
