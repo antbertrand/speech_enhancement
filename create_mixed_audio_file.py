@@ -3,8 +3,8 @@
 import random
 import numpy as np
 import scipy.io.wavfile as wave
-import scipy.signal as sigscy
-#from torchaudio.compliance import kaldi
+#import scipy.signal as sigscy
+from torchaudio.compliance import kaldi
 
 def cal_adjusted_rms(clean_rms, snr):
     a = float(snr) / 20
