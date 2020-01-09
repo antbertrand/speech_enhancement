@@ -1,16 +1,18 @@
 import os
+import time
 
-import random
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import scipy.io.wavfile as wave
 
 import torch
 import torchaudio
+from torchaudio.transforms import Resample
 from torch.utils.data import Dataset
 from librosa.core import stft as librosa_stft
+from librosa.core import istft as librosa_istft
 from torchvision.transforms.functional import normalize
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 if True:  # Not to break code order with autoformatter
     # Needed here, and not under ifmain, because @time decorator is imported
@@ -25,28 +27,27 @@ if True:  # Not to break code order with autoformatter
 
 
 def main():
+
+    # --- Paths
     root_dir = './data/raw'
+
     csv_raw_train = './data/train_raw.csv'
     csv_raw_test = './data/test_raw.csv'
+
     csv_noise_train = './data/train_noise.csv'
+    csv_noise_val = './data/val_noise.csv'
     csv_noise_test = './data/test_noise.csv'
 
-    snr = 0  # TODO check if in dB or not
+    noise_path_train = './data/noise/babble_train.wav'
+    noise_path_val = './data/noise/babble_val.wav'
+    noise_path_test = './data/noise/babble_test.wav'
 
-    noiseDataset = NoiseDataset(csv_noise_train, fs=None)
-
-    in_raw_tf = noiseDataset.add_noise_snr
-    in_raw_tf_kwargs = {"fs": None, "snr": 1}
-
-    # check if csv files are done
-    if not all(os.path.exists(f) for f in (csv_raw_train, csv_raw_test)):
-        create_csv(root_dir, train_path=csv_raw_train, test_path=csv_raw_test)
-
-    features_tf = stft
+    # --- Parameters
+    fs = 8 * 1e3  # 8 kHz
+    snr = 1       # in dB
     n_fft = 256
     hop_length = n_fft // 2
-
-    features_tf_kwargs = {
+    stft_kwargs = {
         "n_fft": n_fft,
         "hop_length": hop_length,
         "win_length": None,
@@ -56,18 +57,17 @@ def main():
         "pad_mode": 'reflect'  # 'reflect'
     }
 
-    train_set = CustomDataset(root_dir, csv_raw_train, csv_noise_train,
-                              in_raw_tf=in_raw_tf, in_raw_tf_kwargs=in_raw_tf_kwargs,
-                              target_raw_tf=None, target_raw_tf_kwargs={},
-                              features_tf=features_tf, features_tf_kwargs=features_tf_kwargs,
-                              in_feats_tf=None, in_feats_tf_kwargs={},
-                              target_feats_tf=None, target_feats_tf_kwargs={})
-    # test_set = CustomDataset(root_dir, csv_raw_test, csv_noise_test,
-    #                          in_raw_tf=in_raw_tf, in_raw_tf_kwargs=in_raw_tf_kwargs,
-    #                          target_raw_tf=None, target_raw_tf_kwargs={},
-    #                          features_tf=features_tf, features_tf_kwargs={},
-    #                          in_feats_tf=None, in_feats_tf_kwargs={},
-    #                          target_feats_tf=None, target_feats_tf_kwargs={})
+    # Check if csv files are done
+    if not all(os.path.exists(f) for f in (csv_raw_train, csv_raw_test)):
+        create_csv(root_dir, train_path=csv_raw_train, test_path=csv_raw_test)
+
+    # TODO separate indices from train and val from timit_train folder
+    train_set = CustomDataset(root_dir, csv_raw_train,
+                              noise_path_train, fs, snr, stft_kwargs)
+    # val_set = CustomDataset(root_dir, csv_raw_train,
+    #                         noise_path_val, fs, snr, stft_kwargs)
+    # test_set = CustomDataset(root_dir, csv_raw_train,
+    #                          noise_path_test, fs, snr, stft_kwargs)
 
     # Plot histograms of lengths
     # _, ax = plt.subplots()
@@ -79,82 +79,142 @@ def main():
     # Get an item and plot it
     print('Taille dataset', len(train_set))
     x, y = train_set[56]
-
-    print(x.shape)
+    x = x[0] ** 2  # keep only module
+    y = y[0] ** 2  # keep only module
 
     #wave.write('./tests/test1.wav', 16000, x)
     #torchaudio.save('./tests/test1.wav', y, 16000)
-    _, (ax1, ax2) = plt.subplots(nrows=1, ncols=2)
-    '''
-    ax1.imshow(x)
-    ax1.set_title('input : {:d}, {:d}'.format(*x.shape))
-    ax2.imshow(y)
-    ax2.set_title('ground truth : {:d}, {:d}'.format(*x.shape))
+    fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2)
+
+    spect1 = ax1.imshow(x.squeeze())
+    ax1.set_title('input : {:d}, {:d}'.format(*x.squeeze().shape))
+    divider = make_axes_locatable(ax1)
+    cax = divider.append_axes('right', size='5%', pad=0.05)
+    fig.colorbar(spect1, cax=cax, orientation='vertical')
+
+    spect2 = ax2.imshow(y.squeeze())
+    ax2.set_title('ground truth : {:d}, {:d}'.format(*y.squeeze().shape))
+    divider = make_axes_locatable(ax2)
+    cax = divider.append_axes('right', size='5%', pad=0.05)
+    fig.colorbar(spect2, cax=cax, orientation='vertical')
     plt.show()
-    '''
 
 ##################################################
 # Classes
 
+# self.resampler = torchaudio.transforms.Resample(
+#             orig_freq=fs_orig,
+#             new_freq=self.fs)
+
+
 class CustomDataset(Dataset):
     """TIMIT dataset."""
 
-    def __init__(self, root_dir, csv_raw, fs=None,
-                 in_raw_tf=None, in_raw_tf_kwargs={},
-                 target_raw_tf=None, target_raw_tf_kwargs={},
-                 features_tf=None, features_tf_kwargs={},
-                 in_feats_tf=None, in_feats_tf_kwargs={},
-                 target_feats_tf=None, target_feats_tf_kwargs={}):
+    def __init__(self, csv_raw, noise_path, params):
 
-        self.root_dir = root_dir
+        # TODO put stft_kwargs inside params
+
+        # Paths
+        self.root_dir = params.data_root
         self.csv_raw = csv_raw
         self.raw_paths = pd.read_csv(self.csv_raw).to_numpy().squeeze()
-        self.fs = fs
-        self.in_raw_tf = in_raw_tf
-        self.in_raw_tf_kwargs = in_raw_tf_kwargs
-        self.target_raw_tf = target_raw_tf
-        self.target_raw_tf_kwargs = target_raw_tf_kwargs
-        self.features_tf = features_tf
-        self.features_tf_kwargs = features_tf_kwargs
-        self.in_feats_tf = in_feats_tf
-        self.in_feats_tf_kwargs = in_feats_tf_kwargs
-        self.target_feats_tf = target_feats_tf
-        self.target_feats_tf_kwargs = target_feats_tf_kwargs
+        self.noise_path = noise_path
+
+        # Parameters
+        self.fs = params.fs
+        self.snr = params.snr
+        self.stft_kwargs = params.stft_kwargs
+        self.params = params
+
+        # Resampler
+        self.resampler = torchaudio.transforms.Resample(new_freq=self.fs)
+
+        # Noise saved in RAM
+        self.noise, fs_orig = read_wav(self.noise_path)
+        self.noise = normalize_sound(self.noise)
+        self.resampler.orig_freq = fs_orig
+        self.noise = self.resampler(self.noise.float()).double() #TODO why float needed ?
+        self.noise = normalize_sound(self.noise)
+        self.noise_len = self.noise.shape[1]
+        self.noise_len_in_s = self.noise_len * (1/self.fs)
+
+    # ------------------------------------------------------------------
+    # Magic methods
 
     def __len__(self):
         return len(self.raw_paths)
 
     def __getitem__(self, index):
 
-        raw_target, fs = read_wav(self.raw_paths[index])  # Ground truth
-
-        # Transform the raw ground truth
-        if self.target_raw_tf is not None:
-            self.target_raw_tf(raw_target, **self.target_raw_tf_kwargs)
+        # Read raw audio ground truth
+        raw_target, fs_orig = read_wav(self.raw_paths[index])
+        self.resampler.orig_freq = fs_orig
+        raw_target = self.resampler(raw_target.float()).double() # TODO why it's needed to go by float ...
+        raw_target = normalize_sound(raw_target)
 
         # Add noise to the raw ground truth to create the raw input
-        raw_in = raw_target
-        if self.in_raw_tf is not None:
-            raw_in = self.in_raw_tf(raw_in, **self.in_raw_tf_kwargs)
+        raw_in = self.add_noise(raw_target)
+        raw_in = normalize_sound(raw_in)
 
-        # Exctract features
-        if self.features_tf is not None:
-            # TODO fix size
-            x, y = (self.features_tf(a, **self.features_tf_kwargs)
-                    for a in (raw_in, raw_target))
-        else:
-            x, y = raw_in, raw_target  # No features extraction
+        # Convert to time-frequency domain using STFT
+        x = stft(raw_in, **self.stft_kwargs)
+        y = stft(raw_target, **self.stft_kwargs)
 
-        # Transform input features
-        if self.in_feats_tf is not None:
-            x = self.in_feats_tf(x, **self.in_feats_tf_kwargs)
-        # Transform target features
-        if self.target_feats_tf is not None:
-            y = self.target_feats_tf(y, **self.target_feats_tf_kwargs)
+        return x, y
 
-        # TODO look for STFT output, to handle sliding windows.
+    # ------------------------------------------------------------------
+    # Dataloader utilities
 
-        return x.squeeze(), y.squeeze()
+    def batch_loader(self):
+
+        for snd_id in np.random.permutation(len(self)):
+
+            # Get STFTs
+            # shape of x and y : (2, C, H, W)
+            # where 2 stands for module and angle of the STFT
+            x, y = self[snd_id]
+
+            # Keep only the module
+            x, y = x[0], y[0]
+
+            # Add padding to the left and the right
+            n_padding_frames = int((self.params.n_frames-1)/2)
+            x = pad(x, n_padding_frames)
+            y = pad(y, n_padding_frames)
+
+            # Batchify x and y
+            X = batchify(x, self.params.n_frames)  # shape (B, C, H, W)
+            Y = batchify(y, self.params.n_frames)
+
+            yield X, Y
+
+    # ------------------------------------------------------------------
+    # Dataset utilities
+
+    def gen_noise(self, nb_samples):
+        """Randomly select a part of the noise
+
+        Arguments:
+            nb_samples {int} -- length of the wanted sequence in number
+                                of samples
+
+        Returns:
+            torch.tensor(dtype=torch.double) -- sequence of noise.
+                                                shape torch.Size([nb_samples])
+        """
+
+        # TODO may "need" to add + 1 to second argument
+        idx = np.random.randint(0, self.noise_len - nb_samples)
+
+        return self.noise[:, idx: idx+nb_samples]
+
+    def add_noise(self, sig):
+        # `sig` size must be (C, T)
+        noise = self.gen_noise(nb_samples=sig.shape[1])
+        return add_noise_snr(sig, noise, self.snr)
+
+    # ------------------------------------------------------------------
+    # Exploration utilities
 
     def histogram_wav_length(self, ax=None, label=None):
 
@@ -162,7 +222,7 @@ class CustomDataset(Dataset):
         rates = np.zeros(len(self))
         n_samples = np.zeros(len(self))
         for i, wav_path in enumerate(self.raw_paths):
-            if not(i % 100):
+            if not i % 100:
                 print('#{:03d}/{:d}'.format(i+1, len(self)), end='\r')
             si, _ = torchaudio.info(wav_path)
             rates[i], n_samples[i] = si.rate, si.length
@@ -186,176 +246,121 @@ class CustomDataset(Dataset):
                 label, int(sum(n_samples)), *sec_to_hms(sum(n_samples)/rate)))
 
 
-class NoiseDataset(Dataset):
+##################################################
+# Dataset utilities
 
-    def __init__(self, csv_noise, fs=None):
-        """ If fs is not None, then the noise file will be resampled to fs.
+def batchify(x, nframes):
 
-        Arguments:
-            csv_noise {[type]} -- csv file containing path to each noisy sound
-                                  file
+    # shape of x : (C, H, W)
 
-        Keyword Arguments:
-            fs {int} -- wanted output sampling rate (default: {None})
-        """
-        self.csv_noise = csv_noise
-        self.fs = fs
-        with open(self.csv_noise, 'r') as f:
-            self.noise_paths = f.read().split('\n')
-        self.nb_samples_cumsum = self.__init_nb_samples_cumsum()
+    # Width of the STFT, equals to the total number of frames
+    w = x.shape[2]
 
-        # for random noise generation
-        import time
-        torch.random.manual_seed(int(1e9*time.time()))
+    X = torch.stack(tuple(x[0, :, i:i+nframes]
+                          for i in range(w - nframes + 1)),
+                    0).unsqueeze(dim=1)  # Unsqueeze for the channel dim
 
-        self.resampler = torchaudio.transforms.Resample(
-            orig_freq=16000, new_freq=16000)
+    return X
 
-    def __init_nb_samples_cumsum(self):
-        """ Returns a list of the cumsum of the lengths of each noise file in
-        the dataset, in number of samples. The purpose is to better randomize
-        noise generation.
 
-        Returns:
-            torch.tensor(dtype=torch.long) -- Length of each noise file in the
-            dataset, in number of samples. Size torch.Size([len(self)]).
-        """
-        rates = np.zeros(len(self))
-        n_samples = np.zeros(len(self))
-        for i, noise_path in enumerate(self.noise_paths):
-            # 2 times faster than wave.getnframes
-            si, _ = torchaudio.info(noise_path)
-            rates[i], n_samples[i] = si.rate, si.length
+def pad(x, nframes):
+    # padding nframes to the left and the rigth, by simple replication
+    # shape of x : (C, H, W)
 
-        rate = rates[0]
-        if not all(r == rate for r in rates):
-            print('WARNING : not all rates are the same')
-            return
-
-        n_samples = torch.tensor(n_samples, dtype=torch.long)
-
-        return n_samples.cumsum(0)
-
-    def __len__(self):
-        return len(self.noise_paths)
-
-    def __getitem__(self, index):
-        """Returns an audio noise file as a tensor. Index is according to the
-        given csv file (`self.csv_noise`).
-
-        Arguments:
-            index {int} -- File index, accordinf to the given csv file.
-
-        Returns:
-            torch.tensor(dtype=torch.double) -- shape torch.Size([length of the sound file in samples])
-        """
-
-        noise, fs = read_wav(self.noise_paths[index])
-        #noise = noise.squeeze()
-        # resample to the dataset wanted fs `self.fs`
-        if (self.fs is not None) and (self.fs != fs):
-            if self.resampler.orig_freq != fs:
-                self.resampler.orig_freq = fs
-        noise = self.resampler(noise)
-
-        return noise
-
-    def gen_noise(self, noise_len, fs=None):
-        """Randomly generate noise by selecting a sequence from the noise
-        dataset
-
-        Arguments:
-            noise_len {int} -- length of the wanted sequence in number of
-                               samples
-
-        Returns:
-            torch.tensor(dtype=torch.double) -- sequence of noise.
-                                                shape torch.Size([noise_len])
-        """
-
-        if fs is not None:
-            fs_old = self.fs
-            self.fs = fs
-
-        # generate random index
-        cnt = 0
-        while True:  # do ... while
-            index = torch.randint(low=0, high=self.nb_samples_cumsum[-1],
-                                  size=(1,))
-            # convert index into sound_index + sample_index
-            sound_index = np.searchsorted(self.nb_samples_cumsum, index)
-            sample_index = index - self.nb_samples_cumsum[sound_index]
-
-            # check if there are enough samples at the right of the sound
-            if (self.nb_samples_cumsum[sound_index] - index) > noise_len:
-                break
-
-            cnt += 1
-            if cnt > 100:
-                print('STUCK')
-
-        # TODO read with open + struct instead of loading the whole file
-        noise = self[sound_index][:, sample_index:sample_index+noise_len]
-        if fs is not None:
-            self.fs = fs_old
-
-        return noise
-
-    def add_noise_snr(self, sig, *, fs=None, snr):
-        # `sig` must be C * T * F
-        noise = self.gen_noise(noise_len=sig.shape[1], fs=fs)
-        return add_noise_snr(sig, noise, snr)
+    return torch.cat((x[:, :, :nframes], x, x[:, :, -nframes:]), dim=2)
 
 
 ##################################################
-# Functions
-
-def cal_adjusted_rms(clean_rms, snr):
-    """ Adjusting RMS to SNR"""
-    a = float(snr) / 20
-    noise_rms = clean_rms / (10**a)
-    return noise_rms
+# Sounds
 
 
-def cal_rms(amp):
-    """ Computing root mean square of signal"""
-    return np.sqrt(np.mean(np.square(amp), axis=-1))
+def stft(x, **kwargs):
+    """
+    Only for 1xL tensors, i.e. C = 1
+    https://librosa.github.io/librosa/generated/librosa.core.stft.html#librosa-core-stft
+    """
+    # TODO maybe put a train and a test mode, as the test mode need
+    # TODO the angle part to make the reconstrcutuon
+
+    S = librosa_stft(x[0].numpy(), **kwargs)
+    S_abs = torch.tensor(np.abs(S), dtype=torch.double).unsqueeze(dim=0)
+    S_ang = torch.tensor(np.angle(S), dtype=torch.double).unsqueeze(dim=0)
+
+    # Normalize # TODO check normalization
+    # S_abs = normalize(S_abs, (S_abs.mean(),), (S_abs.std(),))
+    # S_ang = normalize(S_ang, (S_ang.mean(),), (S_ang.std(),))
+
+    return S_abs, S_ang
+
+
+def stft_abs(x, **kwargs):
+    """
+    Only for 1xL tensors, i.e. C = 1
+    https://librosa.github.io/librosa/generated/librosa.core.stft.html#librosa-core-stft
+    """
+    S = torch.tensor(np.abs(librosa_stft(x[0].numpy(), **kwargs)),
+                     dtype=torch.double).unsqueeze_(dim=0)
+    # S = normalize(S, (S.mean(),), (S.std(),))  # TODO check normalization
+    return S
+
+
+def istft(S_module, S_angle, **kwargs):
+    """
+    Only for 1xL tensors, i.e. C = 1
+    https://librosa.github.io/librosa/generated/librosa.core.istft.html#librosa.core.istft
+    """
+    # TODO reconstruct S from S_module and S_angle
+    # TODO use librosa_istft
+    # S = normalize(S, (S.mean(),), (S.std(),))  # TODO check normalization
+    return 1
 
 
 def add_noise_snr(sig, noise, snr):
-    """ Adding noise to sig according to certain SNR"""
+    """ shape [CxL] channel x length
+    Despite it being a bit less readable than one can do, it is faster that way
 
-    sig = sig.numpy()
-    noise = noise.numpy()
+    """
+    # Center channels
+    sig.add_(- sig.mean(dim=1).unsqueeze(0).T)
+    noise.add_(- noise.mean(dim=1).unsqueeze(0).T)
 
-    # Recentrer les sons
-    clean = sig - np.mean(sig)
-    noise = noise - np.mean(noise)
+    # Calcul addition coefficient
+    alpha = ((torch.mean((sig**2), dim=1) /  # power of sig
+              torch.mean(noise**2, dim=1))  # power of noise
+             * (10 ** (-snr/10))).sqrt()
 
-    # Calcul rms son clean
-    clean_rms = cal_rms(clean)
+    return sig + (noise.T * alpha).T
 
-    start = random.randint(0, len(noise)-len(clean))
-    divided_noise = noise[start: start + len(clean)]
 
-    # Calcul rms bruit
-    noise_rms = cal_rms(divided_noise)
+def normalize_sound(x):
+    "Shape CxL"
 
-    # Ajustement rms bruit pour snr voulu
-    adjusted_noise_rms = cal_adjusted_rms(clean_rms, snr)
-    adjusted_noise = divided_noise * (adjusted_noise_rms / noise_rms)
+    # Handle 1D vectors
+    # if len(x.shape) == 1:
+    #     x = x.unsqueeze(dim=0)
 
-    # Ajout bruit au signal
-    mixed = (clean + adjusted_noise)
+    # Center channles
+    x.add_(- x.mean(dim=1).unsqueeze(dim=0).T)
 
-    # Equilibrage rms sortie = rms entree
-    mixed = mixed * (clean_rms / cal_rms(mixed))
+    # Divide by maximum magnitude to put x in range [-1 1]
+    x.mul_(1 / x.abs().max(dim=1).values.unsqueeze(dim=0).T)
 
-    # Normalisation dans [-1, 1]
-    mixed = mixed/(max(np.amax(mixed), np.amin(mixed)))
+    # Handle 1D vectors
+    # if len(x.shape) == 1:
+    #     x = x.squeeze()
 
-    return torch.tensor(mixed) # TODO handle dtype
+    return x
 
+
+def normalize_sound2(x):
+    "Only for 1 channel"
+    x -= x.mean()
+    mag_max = max(-x.min(), x.max())
+    return x / mag_max
+
+
+##################################################
+# Files
 
 def create_csv(root_dir, train_path='./train_raw.csv', test_path='./test_raw.csv'):
     """Create a csv file for TIMIT corpus.
@@ -392,28 +397,8 @@ def create_csv(root_dir, train_path='./train_raw.csv', test_path='./test_raw.csv
     return train_path, test_path
 
 
-def stft(x, **kwargs):
-    """https://librosa.github.io/librosa/generated/librosa.core.stft.html#librosa-core-stft"""
-    S = torch.tensor(np.abs(librosa_stft(x[0].numpy(), **kwargs)),
-                     dtype=torch.double).unsqueeze_(dim=0)
-    return normalize(S, (S.mean(),), (S.std(),))
-
 ##################################################
 # Main
 
-
 if __name__ == '__main__':
-    if False:
-        csv_noise_train = './data/train_noise.csv'
-        NS = NoiseDataset(csv_noise_train, fs=16000)
-
-        noise = NS[0]
-
-        noise = noise[0].numpy()
-
-        noise = noise / (max(np.amax(noise), np.amin(noise)))
-
-        # print(noise[0].numpy())
-        wave.write('./data/noise/babble_res.wav', 16000, noise)
-
     main()

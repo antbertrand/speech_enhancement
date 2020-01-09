@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 
+
 def conv2d(x, W):
     '''1 dimentional convolution defined in the paper
     the function's name is not appropriate and
@@ -8,30 +9,44 @@ def conv2d(x, W):
     return torch.nn.Conv2d(x, W, strides=[1, 100, 1, 1], padding='SAME')
 
 
-class CNN(torch.nn.Module):
+class MyCNN(torch.nn.Module):
+    """
+    https://adventuresinmachinelearning.com/convolutional-neural-networks-tutorial-in-pytorch/
+    """
 
-    #Our batch shape for input x is (3, 32, 32)
+    # Our batch shape for input x is (3, 32, 32)
 
-    def __init__(self, batch_size, NEFF, N_IN, N_OUT, DECAY=0.999):
-        '''NEFF: number of effective FFT points
-        N_IN: number of input frames into the nets
-        N_OUT: only tested for 1, errors may occur for other number
-        DECAY: decay for global mean and var estimation using batch norm
-        '''
+    def __init__(self, params):
 
-        super(CNN, self).__init__()
+        super(MyCNN, self).__init__()
 
-        self.batch_size = batch_size
-        self.NEFF = NEFF
-        self.N_IN = N_IN
-        self.N_OUT = N_OUT
-        self.DECAY = DECAY
+        self.params = params
 
-        self.conv1 = torch.nn.Conv2d(3, 18, kernel_size=3, stride=1, padding=1)
-        self.fc1 = torch.nn.Linear(18 * 16 * 16, 64)
+        # Architecture
+        # To understand what will be the output size, see :
+        # https://discuss.pytorch.org/t/how-to-keep-the-shape-of-input-and-output-same-when-dilation-conv/14338/2
+        self.conv1 = torch.nn.Conv2d(1, 5, kernel_size=3, stride=1,
+                                     padding=1)
+        self.conv2 = torch.nn.Conv2d(5, 7, kernel_size=3, stride=1,
+                                     padding=1)
+        self.conv3 = torch.nn.Conv2d(7, 10, kernel_size=3, stride=1,
+                                     padding=1)
+        self.conv4 = torch.nn.Conv2d(10, 7, kernel_size=3, stride=1,
+                                     padding=1)
+        self.conv5 = torch.nn.Conv2d(7, 5, kernel_size=3, stride=1,
+                                     padding=1)
+        self.conv6 = torch.nn.Conv2d(5, 1, kernel_size=3, stride=1,
+                                     padding=1)
+        
+        self.double()
 
     def forward(self, x):
 
         x = self.conv1(x)
-        x = self.fc1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.conv5(x)
+        x = self.conv6(x)
+        
         return x
