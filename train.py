@@ -1,4 +1,5 @@
 import datetime
+import copy
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -33,11 +34,11 @@ def main():
     # Datasets
     # TODO need to separate training set in train and validation sets
     train_set = dataset.CustomDataset(params.train_raw_csv_path,
-                                      './data/noise/babble_train.wav', params)
+                                      './data/noise/babble_train.wav', params, mode='train')
     val_set = dataset.CustomDataset(params.train_raw_csv_path,
-                                    './data/noise/babble_val.wav', params)
+                                    './data/noise/babble_val.wav', params, mode='validation')
     # test_set = dataset.CustomDataset(params.test_raw_csv_path,
-    #                                  params.test_noise_csv_path, params)
+    #                                  params.test_noise_csv_path, params, mode='test')
 
     train(model, optimizer, loss_fn, train_set, val_set, params)
 
@@ -50,9 +51,12 @@ def train(model, optimizer, loss_fn, train_set, val_set, params, verbose=True):
 
     logs = TrainingHistory()
 
+    nn = 0
     while not logs.early_stop:
 
-        model.train()  # Do it in each loop, because model.eval() called at validation
+        nn += 1
+        if nn > 5:
+            break
 
         if verbose:
             start_t = datetime.datetime.now()
@@ -60,126 +64,111 @@ def train(model, optimizer, loss_fn, train_set, val_set, params, verbose=True):
             # logs.epoch not yet up-to-date, hence `+1`
             print("epoch #{}".format(logs.epoch + 1))
 
-        # To compute mean loss over the full batch
-        loss_hist = []
-        len_hist = []
+        for mode, dataset in zip(('train', '  val'), (train_set, val_set)):
 
-        # Each sound is considered as a batch
-        for X, Y in train_set.batch_loader():
+            if mode == 'train':
+                model.train()
+                dataset_size = dataset.train_size
+                # Unfreeze model's params
+                for p in model.parameters():
+                    p.requires_grad = True
+            else:
+                model.eval()
+                dataset_size = dataset.val_size
+                # Freeze model's params
+                for p in model.parameters():
+                    p.requires_grad = False
 
-            # shape of X and Y : (B, C, H, W), where :
-            # B is the number of frames of the STFT of the sound
-            # C is the number of channels (equals to 1 in our case)
-            # H is the height of each input sample (equals to params.nfft//2 +1)
-            # W is the width of each input sample (equals to params.n_frames)
+            # To compute mean loss over the full batch
+            loss_hist = torch.zeros(dataset_size)
+            len_hist = torch.zeros(dataset_size)
 
-            # Feed forward
-            Y_pred = model(X)
+            # Each sound is considered as a batch
+            mm = 0
+            for i, (X, Y) in enumerate(train_set.batch_loader()):
 
-            # Go from batch to reconstructed STFT
-            y_pred = reconstruct(Y_pred)
-            y = reconstruct(Y)
+                mm += 1
+                if mm > 10:
+                    break
 
-            # Compute loss
-            loss = loss_fn(y, y_pred)
-            loss = loss.sum()
+                # shape of X and Y : (B, C, H, W), where :
+                # B is the number of frames of the STFT of the sound
+                # C is the number of channels (equals to 1 in our case)
+                # H is the height of each input sample (equals to params.nfft//2 +1)
+                # W is the width of each input sample (equals to params.n_frames)
 
-            # Learn
-            model.zero_grad()
-            loss.backward()
-            optimizer.step()
+                # Feed forward
+                Y_pred = model(X)
 
-            # Backup loss
-            loss_hist.append(loss.data)
-            len_hist.append(y_pred.shape[2])
+                # Go from batch to reconstructed STFT
+                y_pred = reconstruct(Y_pred)
+                y = reconstruct(Y)
 
-            loss_mean = sum(torch.tensor(loss_hist) *
-                            torch.tensor(len_hist)) / sum(len_hist)
+                # Compute loss
+                loss = loss_fn(y, y_pred)
+                loss = loss.sum()
 
-            # Print info
+                # Learn
+                if mode == 'train':
+                    model.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+
+                # Backup loss
+                loss_hist[i] = loss.data
+                len_hist[i] = y_pred.shape[2]
+
+                loss_mean = torch.sum(loss_hist[:i+1] *
+                                      len_hist[:i+1]) / len_hist[:i+1].sum()
+
+                # loss_mean = sum(torch.tensor(loss_hist) *
+                #                 torch.tensor(len_hist)) / sum(len_hist)
+
+                # Print info
+                if verbose:
+                    epoch_percent = (i+1) / dataset_size
+                    elapsed_t = datetime.datetime.now() - start_t
+                    elapsed_t_str = '{:02.0f}:{:02.0f}  -- {:3.3f}%  #{:4d}/{:d}'.format(
+                        *divmod(elapsed_t.seconds, 60), epoch_percent, i+1, dataset_size)
+                    print("  {} loss: {:.3f} (elapsed: {})".format(
+                        mode, loss_mean, elapsed_t_str), end='\r')
+
+                # Register loss
+                # if i +1 == dataset_size:
+                if True:
+                    if mode == 'train':
+                        train_loss = loss_mean
+                    else:
+                        val_loss = loss_mean
+
+            # Re-print info, but not to be erased
             if verbose:
-                elapsed_t = datetime.datetime.now() - start_t
-                elapsed_t_str = '{:02.0f}:{:02.0f}'.format(
-                    *divmod(elapsed_t.seconds, 60))
-                print("      loss: {:.3f} (elapsed: {})".format(
-                    loss_mean, elapsed_t_str), end='\r')
-
-        # Re-print info, but not to be erased
-        if verbose:
-            print("      loss: {:.3f} (elapsed: {})".format(
-                loss_mean, elapsed_t_str))
-
-        # Compute val loss
-        val_loss = validate(model, loss_fn, val_set)
-        if verbose:
-            elapsed_t = datetime.datetime.now() - start_t
-            elapsed_t_str = '{:02.0f}:{:02.0f}'.format(
-                *divmod(elapsed_t.seconds, 60))
-            print("  val loss: {:.3f} (elapsed: {})".format(val_loss,
-                                                            elapsed_t_str))
+                print("  {} loss: {:.3f} (elapsed: {})".format(
+                    mode, loss_mean, elapsed_t_str))
 
         # --- Save model
 
         # Get the path
-        if not params.backup.save_model:
+        if not params.save_model:
             saved_model_path = None
         else:
             # 'logs' are not yet up-to-date, hence '+1'
             saved_model_path = backup_utils.get_model_saving_path(
-                logs.epoch + 1, loss_mean, params)
+                logs.epoch + 1, train_loss, params)
 
         # Update logs
-        logs.add_values(loss_mean, val_loss, saved_model_path)
+        logs.add_values(train_loss, val_loss, saved_model_path)
 
         # Save model
-        if params.backup.save_model:
+        if params.save_model:
             assert saved_model_path == backup_utils.save_checkpoint(
-                model, optimizer, loss_mean, logs, params)
+                model, optimizer, train_loss, logs, params)
 
         if logs.epoch >= params.max_epoch:
             break
 
     return logs
 
-
-def validate(model, loss_fn, dataset):  # TODO check if doesn't need params
-
-    # Set model to evaluation mode
-    model.eval()
-
-    loss_hist = []
-    len_hist = []
-
-    model.eval()
-
-    for X, Y in dataset.batch_loader():
-
-        # Freeze model's params
-        for p in model.parameters():
-            p.requires_grad = False
-
-        # Forward
-        Y_pred = model(X)
-
-        # Compute loss
-        loss = loss_fn(Y_pred, Y)
-        if loss.shape != torch.Size([]):
-            loss = loss.sum()
-
-        loss_hist.append(loss.data)
-        len_hist.append(len(Y_pred))
-        # TODO may be the length of the sound, not the total number of frames, but they are normally equal
-        # TODO finally, do I compute the loss on the unstacked STFT or not ?
-
-    loss = sum(loss_hist)/sum(len_hist)
-
-    # Unfreeze model's params
-    # TODO maybe all params doesn't require grad,
-    # TODO and shouldn't have been frozen in first place ... Check it
-    for p in model.parameters():
-        p.requires_grad = True
-
-    return loss
 
 ###############################################################################
 # Functions

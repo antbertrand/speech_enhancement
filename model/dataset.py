@@ -110,9 +110,9 @@ def main():
 class CustomDataset(Dataset):
     """TIMIT dataset."""
 
-    def __init__(self, csv_raw, noise_path, params):
+    def __init__(self, csv_raw, noise_path, params, mode='test'):
 
-        # TODO put stft_kwargs inside params
+        self.mode = mode
 
         # Paths
         self.root_dir = params.data_root
@@ -125,6 +125,9 @@ class CustomDataset(Dataset):
         self.snr = params.snr
         self.stft_kwargs = params.stft_kwargs
         self.params = params
+        if mode != 'test':
+            self.train_size = int(self.params.train_val_ratio * len(self))
+            self.val_size = len(self) - self.train_size
 
         # Resampler
         self.resampler = torchaudio.transforms.Resample(new_freq=self.fs)
@@ -133,7 +136,8 @@ class CustomDataset(Dataset):
         self.noise, fs_orig = read_wav(self.noise_path)
         self.noise = normalize_sound(self.noise)
         self.resampler.orig_freq = fs_orig
-        self.noise = self.resampler(self.noise.float()).double() #TODO why float needed ?
+        # TODO why float needed ?
+        self.noise = self.resampler(self.noise.float()).double()
         self.noise = normalize_sound(self.noise)
         self.noise_len = self.noise.shape[1]
         self.noise_len_in_s = self.noise_len * (1/self.fs)
@@ -149,7 +153,8 @@ class CustomDataset(Dataset):
         # Read raw audio ground truth
         raw_target, fs_orig = read_wav(self.raw_paths[index])
         self.resampler.orig_freq = fs_orig
-        raw_target = self.resampler(raw_target.float()).double() # TODO why it's needed to go by float ...
+        # TODO why it's needed to go by float ...
+        raw_target = self.resampler(raw_target.float()).double()
         raw_target = normalize_sound(raw_target)
 
         # Add noise to the raw ground truth to create the raw input
@@ -167,7 +172,16 @@ class CustomDataset(Dataset):
 
     def batch_loader(self):
 
-        for snd_id in np.random.permutation(len(self)):
+        if self.mode == 'train':
+            snd_indices = np.arange(self.train_size)
+        elif self.mode == 'validation':
+            snd_indices = np.arange(self.train_size, len(self))
+        elif self.mode == 'test':
+            snd_indices = np.arange(len(self))
+        else:
+            return ('ERROR : unknown mode, must be one of str(test, train, validation)')
+
+        for snd_id in np.random.permutation(snd_indices):
 
             # Get STFTs
             # shape of x and y : (2, C, H, W)
@@ -326,7 +340,7 @@ def add_noise_snr(sig, noise, snr):
 
     # Calcul addition coefficient
     alpha = ((torch.mean((sig**2), dim=1) /  # power of sig
-              torch.mean(noise**2, dim=1))  # power of noise
+              torch.mean(noise**2, dim=1))   # power of noise
              * (10 ** (-snr/10))).sqrt()
 
     return sig + (noise.T * alpha).T

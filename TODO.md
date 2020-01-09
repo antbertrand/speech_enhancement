@@ -2,6 +2,10 @@
 
 ## Code
 
+### Train / Validation
+
+Séparer en train et validation, parce que la c'est train=train et validation=validation
+
 ### Reconstruction du spectrogramme à partir d'un batch de sortie
 
 Chaque son est considéré comme un batch.
@@ -73,3 +77,8 @@ une ditribution assez constante dans le temps.
 
 RSB sortie vs RSB entrée --> permet de comparer différents réseaux sur
 la même tâche.
+
+Pour ça on peut faire :
+
+RSB entre clean et bruit en sortie
+Rapport en bruit en sortie et bruit enlevé

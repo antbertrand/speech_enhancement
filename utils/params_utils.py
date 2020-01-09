@@ -12,6 +12,9 @@ class Params():
         # --- Learning parameters
         self.learning_rate = 1e-3
         self.n_frames = 7
+        self.max_epoch = 30
+        # same ratio as noise set ratio (in seconds)
+        self.train_val_ratio = train_val_ratio = 180/(180+25)
 
         # --- Dataset parameters
 
@@ -38,8 +41,11 @@ class Params():
         self.test_noise_csv_name = 'test_noise.csv'
 
         # Backup
+        self.save_model = True
         self.backup_root = './experiments/saved_models'
         self.backup_saving_dir = 'experiment1'
+        
+        self.__init_id_dict()
 
     # ------------------------------------------------------------------
     #
@@ -85,7 +91,7 @@ class Params():
 
     @property
     def model_id(self):
-        return "FS_{fs}_SNR_{snr}_NFFT{nfft}_HOP_{hop_length}"\
+        return "fs{fs:04.0f}_snr{snr}_nfft{n_fft}_hop{hop_length}"\
             .format(**self.id_dict)
 
     # --- Input paths
