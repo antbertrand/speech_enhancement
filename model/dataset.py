@@ -182,25 +182,7 @@ class CustomDataset(Dataset):
             return ('ERROR : unknown mode, must be one of str(test, train, validation)')
 
         for snd_id in np.random.permutation(snd_indices):
-
-            # Get STFTs
-            # shape of x and y : (2, C, H, W)
-            # where 2 stands for module and angle of the STFT
-            x, y = self[snd_id]
-
-            # Keep only the module
-            x, y = x[0], y[0]
-
-            # Add padding to the left and the right
-            n_padding_frames = int((self.params.n_frames-1)/2)
-            x = pad(x, n_padding_frames)
-            y = pad(y, n_padding_frames)
-
-            # Batchify x and y
-            X = batchify(x, self.params.n_frames)  # shape (B, C, H, W)
-            Y = batchify(y, self.params.n_frames)
-
-            yield X, Y
+            yield self[snd_id]
 
     # ------------------------------------------------------------------
     # Dataset utilities
@@ -266,6 +248,9 @@ class CustomDataset(Dataset):
 def batchify(x, nframes):
 
     # shape of x : (C, H, W)
+
+    # Add padding to the left and the right
+    x = pad(x, (nframes-1)//2)
 
     # Width of the STFT, equals to the total number of frames
     w = x.shape[2]

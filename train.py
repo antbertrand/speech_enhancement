@@ -7,6 +7,7 @@ import torch
 
 from utils import backup_utils, params_utils
 from model import net, dataset
+from model.dataset import batchify
 
 ###############################################################################
 # Main
@@ -32,7 +33,6 @@ def main():
                   [param_tensor].size())
 
     # Datasets
-    # TODO need to separate training set in train and validation sets
     train_set = dataset.CustomDataset(params.train_raw_csv_path,
                                       './data/noise/babble_train.wav', params, mode='train')
     val_set = dataset.CustomDataset(params.train_raw_csv_path,
@@ -51,12 +51,7 @@ def train(model, optimizer, loss_fn, train_set, val_set, params, verbose=True):
 
     logs = TrainingHistory()
 
-    nn = 0
     while not logs.early_stop:
-
-        nn += 1
-        if nn > 5:
-            break
 
         if verbose:
             start_t = datetime.datetime.now()
@@ -64,34 +59,36 @@ def train(model, optimizer, loss_fn, train_set, val_set, params, verbose=True):
             # logs.epoch not yet up-to-date, hence `+1`
             print("epoch #{}".format(logs.epoch + 1))
 
-        for mode, dataset in zip(('train', '  val'), (train_set, val_set)):
+        for mode, data_set in zip(('train', '  val'), (train_set, val_set)):
 
             if mode == 'train':
                 model.train()
-                dataset_size = dataset.train_size
+                dataset_size = data_set.train_size
                 # Unfreeze model's params
                 for p in model.parameters():
                     p.requires_grad = True
             else:
                 model.eval()
-                dataset_size = dataset.val_size
+                dataset_size = data_set.val_size
                 # Freeze model's params
                 for p in model.parameters():
                     p.requires_grad = False
+                    
+            # Compute verbose step
+            if verbose:
+                verb_step = dataset_size // 1000
 
             # To compute mean loss over the full batch
             loss_hist = torch.zeros(dataset_size)
             len_hist = torch.zeros(dataset_size)
 
-            # Each sound is considered as a batch
-            mm = 0
-            for i, (X, Y) in enumerate(train_set.batch_loader()):
+            # Each sound is considered as a batch, keep only module
+            for i, ((x, _), (y, _)) in enumerate(train_set.batch_loader()):
 
-                mm += 1
-                if mm > 10:
-                    break
+                # Batchify x
+                X = batchify(x, params.n_frames)  # shape (B, C, H, W)
 
-                # shape of X and Y : (B, C, H, W), where :
+                # shape of X : (B, C, H, W), where :
                 # B is the number of frames of the STFT of the sound
                 # C is the number of channels (equals to 1 in our case)
                 # H is the height of each input sample (equals to params.nfft//2 +1)
@@ -101,8 +98,8 @@ def train(model, optimizer, loss_fn, train_set, val_set, params, verbose=True):
                 Y_pred = model(X)
 
                 # Go from batch to reconstructed STFT
-                y_pred = reconstruct(Y_pred)
-                y = reconstruct(Y)
+                # y_pred = reconstruct(Y_pred)
+                y_pred = Y_pred.squeeze().T.unsqueeze(0)  # TODO optimize
 
                 # Compute loss
                 loss = loss_fn(y, y_pred)
@@ -118,24 +115,20 @@ def train(model, optimizer, loss_fn, train_set, val_set, params, verbose=True):
                 loss_hist[i] = loss.data
                 len_hist[i] = y_pred.shape[2]
 
-                loss_mean = torch.sum(loss_hist[:i+1] *
+                # Print info (or register loss_mean if last sound)
+                if (verbose and not i % verb_step) or (i+1 == dataset_size):
+                    loss_mean = torch.sum(loss_hist[:i+1] *
                                       len_hist[:i+1]) / len_hist[:i+1].sum()
-
-                # loss_mean = sum(torch.tensor(loss_hist) *
-                #                 torch.tensor(len_hist)) / sum(len_hist)
-
-                # Print info
-                if verbose:
-                    epoch_percent = (i+1) / dataset_size
+                    
+                    epoch_percent = ((i+1) / dataset_size) * 100
                     elapsed_t = datetime.datetime.now() - start_t
-                    elapsed_t_str = '{:02.0f}:{:02.0f}  -- {:3.3f}%  #{:4d}/{:d}'.format(
+                    elapsed_t_str = '{:02.0f}:{:02.0f}  -- {:5.1f}%  #{:4d}/{:d}'.format(
                         *divmod(elapsed_t.seconds, 60), epoch_percent, i+1, dataset_size)
                     print("  {} loss: {:.3f} (elapsed: {})".format(
                         mode, loss_mean, elapsed_t_str), end='\r')
 
                 # Register loss
-                # if i +1 == dataset_size:
-                if True:
+                if i + 1 == dataset_size:
                     if mode == 'train':
                         train_loss = loss_mean
                     else:
@@ -168,32 +161,6 @@ def train(model, optimizer, loss_fn, train_set, val_set, params, verbose=True):
             break
 
     return logs
-
-
-###############################################################################
-# Functions
-
-
-def reconstruct(X, apodisation=None):
-    # TODO add apodisation, alignement and stride arguments
-
-    # TODO
-    # If apodisation is None, it means that we only keep one
-    # frame for each output
-    # Else, we need to do an overlapping summation
-
-    # X of shape (B, C, H, W), with C=1
-    # output of shape (C, H, B) in our case (i.e. stride=1, otherwise third dim < B, or idk yet)
-
-    # nframes need to be odd, it's easier
-    nframes = X.shape[3]
-
-    # case for alignment == 'center' and apodisation == None
-    idx_to_keep = int((nframes - 1) / 2)
-
-    x = X[:, 0, :, idx_to_keep].T.unsqueeze(0)
-
-    return x
 
 
 ###############################################################################
