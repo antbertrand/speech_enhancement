@@ -1,26 +1,31 @@
 import os
-import time
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-
 import torch
 import torchaudio
-from torchaudio.transforms import Resample
-from torch.utils.data import Dataset
-from librosa.core import stft as librosa_stft
 from librosa.core import istft as librosa_istft
-from torchvision.transforms.functional import normalize
+from librosa.core import stft as librosa_stft
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from torch.utils.data import Dataset
+from torchvision.transforms.functional import normalize
 
-if True:  # Not to break code order with autoformatter
-    # Needed here, and not under ifmain, because @time decorator is imported
+# For imports to work from __main__ and from other folders
+if __name__ == '__main__':
     import sys
-    from os import path
-    sys.path.insert(1, path.dirname(path.dirname(path.abspath(__file__))))
+    import os
+    sys.path.insert(1, os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
+
+if True:  # For the order to not be broken with autoformatter
+    from utils import cuda_utils
     from utils.utils import sec_to_hms
     from utils.wavutils import read_wav
+    from utils.cuda_utils import init_cuda
+
+
+DEVICE = init_cuda()
 
 ##################################################
 # Main
@@ -153,7 +158,7 @@ class CustomDataset(Dataset):
         # Read raw audio ground truth
         raw_target, fs_orig = read_wav(self.raw_paths[index])
         self.resampler.orig_freq = fs_orig
-        # TODO why it's needed to go by float ...
+        # TODO why it's needed to go with float ...
         raw_target = self.resampler(raw_target.float()).double()
         raw_target = normalize_sound(raw_target)
 
@@ -164,6 +169,8 @@ class CustomDataset(Dataset):
         # Convert to time-frequency domain using STFT
         x = stft(raw_in, **self.stft_kwargs)
         y = stft(raw_target, **self.stft_kwargs)
+
+        assert x[0].device == DEVICE
 
         return x, y
 
@@ -324,9 +331,8 @@ def add_noise_snr(sig, noise, snr):
     noise.add_(- noise.mean(dim=1).unsqueeze(0).T)
 
     # Calcul addition coefficient
-    alpha = ((torch.mean((sig**2), dim=1) /  # power of sig
-              torch.mean(noise**2, dim=1))   # power of noise
-             * (10 ** (-snr/10))).sqrt()
+    alpha = ((torch.mean(sig**2, dim=1) /  # power of sig
+              torch.mean(noise**2, dim=1)) * (10 ** (-snr/10))).sqrt()
 
     return sig + (noise.T * alpha).T
 

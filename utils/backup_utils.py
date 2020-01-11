@@ -3,11 +3,15 @@ import os
 import re
 import torch
 
+from utils.cuda_utils import init_cuda
+
+DEVICE = init_cuda()
+
 
 def load_checkpoint(model, optimizer, saved_model_path, verbose=False):
 
     if os.path.isfile(saved_model_path):
-        saved_model = torch.load(saved_model_path)
+        saved_model = torch.load(saved_model_path, map_location=DEVICE)
         model.load_state_dict(saved_model['model_state_dict'])
         
         if verbose:
@@ -20,6 +24,8 @@ def load_checkpoint(model, optimizer, saved_model_path, verbose=False):
     if optimizer is not None:
         if 'optimizer_state_dict' in saved_model:
             optimizer.load_state_dict(saved_model['optimizer_state_dict'])
+            
+    return saved_model['logs']
 
 
 def save_checkpoint(model, optimizer, loss, logs, params):

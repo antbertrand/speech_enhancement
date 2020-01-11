@@ -5,9 +5,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from utils import backup_utils, params_utils
+from utils import backup_utils, params_utils, cuda_utils
 from model import net, dataset
 from model.dataset import batchify
+
+
+DEVICE = cuda_utils.init_cuda(verbose=True)
+
 
 ###############################################################################
 # Main
@@ -32,6 +36,15 @@ def main():
             print(param_tensor, "\t\t", model.state_dict()
                   [param_tensor].size())
 
+    # Load a checkpoint
+    chkpt_logs = None
+    if params.load_model:
+        saved_model_path = "./experiments/saved_models/experiment1/fs8000_snr1_nfft256_hop128/003_0-618.pt"
+        chkpt_logs = backup_utils.load_checkpoint(
+            model, optimizer, saved_model_path)
+        print('\nModel parameters updated with saved model :')
+        print('  ' + saved_model_path)
+
     # Datasets
     train_set = dataset.CustomDataset(params.train_raw_csv_path,
                                       './data/noise/babble_train.wav', params, mode='train')
@@ -40,18 +53,27 @@ def main():
     # test_set = dataset.CustomDataset(params.test_raw_csv_path,
     #                                  params.test_noise_csv_path, params, mode='test')
 
-    train(model, optimizer, loss_fn, train_set, val_set, params)
+    train(model, optimizer, loss_fn, train_set, val_set, params,
+          chkpt_logs=chkpt_logs)
 
 
 ###############################################################################
 # Main functions
 
 
-def train(model, optimizer, loss_fn, train_set, val_set, params, verbose=True):
+def train(model, optimizer, loss_fn, train_set, val_set, params,
+          chkpt_logs=None, verbose=True):
 
     logs = TrainingHistory()
+    if chkpt_logs is not None:
+        logs.load_from_other(chkpt_logs)
 
+    nn = 0  # Early break for testing
     while not logs.early_stop:
+
+        nn += 1  # TODO withdraw early break
+        if nn > 3:
+            break
 
         if verbose:
             start_t = datetime.datetime.now()
@@ -73,17 +95,22 @@ def train(model, optimizer, loss_fn, train_set, val_set, params, verbose=True):
                 # Freeze model's params
                 for p in model.parameters():
                     p.requires_grad = False
-                    
+
             # Compute verbose step
             if verbose:
-                verb_step = dataset_size // 1000
+                verb_step = (dataset_size // 1000)+1
 
             # To compute mean loss over the full batch
             loss_hist = torch.zeros(dataset_size)
             len_hist = torch.zeros(dataset_size)
 
             # Each sound is considered as a batch, keep only module
-            for i, ((x, _), (y, _)) in enumerate(train_set.batch_loader()):
+            mm = 0  # early break for testing
+            for i, ((x, _), (y, _)) in enumerate(data_set.batch_loader()):
+
+                mm += 1  # TODO withdraw early break
+                if mm > 3:
+                    break
 
                 # Batchify x
                 X = batchify(x, params.n_frames)  # shape (B, C, H, W)
@@ -96,6 +123,7 @@ def train(model, optimizer, loss_fn, train_set, val_set, params, verbose=True):
 
                 # Feed forward
                 Y_pred = model(X)
+                assert Y_pred.device == DEVICE
 
                 # Go from batch to reconstructed STFT
                 # y_pred = reconstruct(Y_pred)
@@ -118,8 +146,8 @@ def train(model, optimizer, loss_fn, train_set, val_set, params, verbose=True):
                 # Print info (or register loss_mean if last sound)
                 if (verbose and not i % verb_step) or (i+1 == dataset_size):
                     loss_mean = torch.sum(loss_hist[:i+1] *
-                                      len_hist[:i+1]) / len_hist[:i+1].sum()
-                    
+                                          len_hist[:i+1]) / len_hist[:i+1].sum()
+
                     epoch_percent = ((i+1) / dataset_size) * 100
                     elapsed_t = datetime.datetime.now() - start_t
                     elapsed_t_str = '{:02.0f}:{:02.0f}  -- {:5.1f}%  #{:4d}/{:d}'.format(
@@ -128,7 +156,8 @@ def train(model, optimizer, loss_fn, train_set, val_set, params, verbose=True):
                         mode, loss_mean, elapsed_t_str), end='\r')
 
                 # Register loss
-                if i + 1 == dataset_size:
+                # if i + 1 == dataset_size:
+                if True:  # When there are early stops for testing # TODO withdraw early break
                     if mode == 'train':
                         train_loss = loss_mean
                     else:
@@ -226,10 +255,6 @@ class TrainingHistory():
 
         for k, v in other_dict.items():
             self.__dict__[k] = copy.deepcopy(v)
-
-    def load_from_checkpoint(self, chkpt_path):
-        # TODO
-        pass
 
     def add_values(self, train_loss, val_loss, model_path):
 

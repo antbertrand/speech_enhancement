@@ -42,8 +42,9 @@ class Params():
 
         # Backup
         self.save_model = True
+        self.load_model = True
         self.backup_root = './experiments/saved_models'
-        self.backup_saving_dir = 'experiment1'
+        self.backup_saving_dir = 'park2017_R-CED9'
         
         self.__init_id_dict()
 

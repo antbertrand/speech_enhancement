@@ -1,13 +1,9 @@
 import torch
-import torch.nn.functional as F
 from torch.nn import Conv2d
 
+from utils.cuda_utils import init_cuda
 
-def conv2d(x, W):
-    '''1 dimentional convolution defined in the paper
-    the function's name is not appropriate and
-    we didn't change that'''
-    return torch.nn.Conv2d(x, W, strides=[1, 100, 1, 1], padding='SAME')
+DEVICE = init_cuda()
 
 
 class MyCNN(torch.nn.Module):
@@ -44,6 +40,7 @@ class MyCNN(torch.nn.Module):
                                padding=(((params.n_fft//2 + 1)-1)//2, 0))
 
         self.double()
+        self.to(DEVICE)
 
     def forward(self, x):
 

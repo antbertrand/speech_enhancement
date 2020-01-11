@@ -4,6 +4,10 @@ import numpy as np
 import torch
 from scipy.io import wavfile
 
+from utils.cuda_utils import init_cuda
+
+DEVICE = init_cuda()
+
 
 def read_wav(filename, offset=0, nframes=None, dtype=torch.double):
     """Efficiently read wav files. Using `scipy.io.wavfile.read()` when
@@ -39,4 +43,4 @@ def read_wav(filename, offset=0, nframes=None, dtype=torch.double):
         x.unsqueeze_(dim=0)
         x -= x.mean()
 
-    return x, fs
+    return x.to(DEVICE), fs
